@@ -1,0 +1,14 @@
+- detect exact duplicates in different word lists and filter them out
+- add the ability to import a word list as the host
+- word choices up to 10
+- time limit in increments of 10 from 10 to 150 (keep the one for 180)
+- amount of rounds in increments from 1 to 20
+- add the ability to kick players from the lobby screen, also add the ability to chat in the lobby
+- make the chat bigger
+- amount of word hints from increments of 1 to 10
+- maximum players 15
+- make the x/x rounds thing bigger
+- it shows what player is choosing a word 
+- add a light and dark mode in the lobby screen and be able to change name in the lobby screen 
+- artist points depend on the number of players that guess the word and the amount of time left when the last person guesses 
+- be able to play solo (for testing)

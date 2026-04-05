@@ -1,7 +1,18 @@
+sound effects
+    low on time
+    round start
+    correct guess
 
-host can kick players
-
-more drawing tools
-    default colors should still be there, just above the custom colors section
-
-        
+in combinations, if you get one part correct it gets locked in and doesn't need to be reentered with the other correct answer 
+in combinations you get to pick each option idividually
+the word hint shows gaps where there are spaces
+stronger autocorrect
+can undo a clear
+number of letters in each hidden word is shown below them 
+12 default colors are shown above the custom color section
+fix custom colors so a new recent is only added when you draw with it 
+make a seperate button to go back to the home page, but with a 70% chance to crash everything
+round the points to multiples of 25
+make it so you can drag the sliders on the word list
+make the canvas bigger
+the send button in the chat clips outside the chat box 
