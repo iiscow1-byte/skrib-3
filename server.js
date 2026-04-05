@@ -1,6 +1,8 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -8,24 +10,24 @@ const io = new Server(server);
 
 app.use(express.static(__dirname));
 
-const WORDS = [
-  'apple','banana','guitar','elephant','rainbow','bicycle','castle','dragon',
-  'umbrella','volcano','lighthouse','pineapple','astronaut','butterfly','cactus',
-  'diamond','eagle','flamingo','giraffe','hamster','igloo','jellyfish','kangaroo',
-  'lantern','mushroom','ninja','octopus','penguin','quicksand','raccoon','sunset',
-  'tornado','unicorn','violin','waterfall','xylophone','yoga','zebra','airplane',
-  'balloon','camera','dolphin','eiffel','forest','galaxy','helicopter','island',
-  'jungle','kitten','lemon','mermaid','noodles','orange','parrot','robot',
-  'sandwich','trophy','ukulele','vampire','wizard','yacht','zombie','anchor',
-  'bridge','cloud','desert','engine','feather','ghost','haunted','ink','jewel',
-  'knight','ladder','magnet','nurse','orbit','palace','queen','river','snow',
-  'telescope','universe','vortex','whale','xray','yoyo','zipper'
-];
+// Load word lists from words/ directory
+const wordLists = {};
+function loadWordLists() {
+  const wordsDir = path.join(__dirname, 'words');
+  if (!fs.existsSync(wordsDir)) return;
+  const files = fs.readdirSync(wordsDir).filter(f => f.endsWith('.txt'));
+  files.forEach(file => {
+    const name = path.basename(file, '.txt');
+    const content = fs.readFileSync(path.join(wordsDir, file), 'utf8');
+    const words = content.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+    if (words.length > 0) wordLists[name] = words;
+  });
+  console.log(`Loaded word lists: ${Object.keys(wordLists).join(', ')}`);
+}
+loadWordLists();
 
-const ROUND_TIME = 80;
 const ROUNDS_PER_GAME = 3;
 const MAX_PLAYERS = 8;
-const WORD_CHOICES = 3;
 
 const rooms = {};
 
@@ -33,22 +35,99 @@ function generateRoomId() {
   return Math.random().toString(36).substr(2, 6).toUpperCase();
 }
 
-function getRandomWords(count) {
-  const shuffled = [...WORDS].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
+// Weighted random list selection: each list has a weight (1-5).
+// Within a list, words used fewer times in this game are preferred.
+function getRandomWords(room, count) {
+  const selected = (room.selectedLists && room.selectedLists.length > 0)
+    ? room.selectedLists.filter(l => wordLists[l] && wordLists[l].length > 0)
+    : Object.keys(wordLists);
+
+  if (selected.length === 0) return [];
+
+  const weights = room.listWeights || {};
+
+  // Build weighted list pool
+  function pickList() {
+    const totalWeight = selected.reduce((s, n) => s + (weights[n] || 1), 0);
+    let r = Math.random() * totalWeight;
+    for (const name of selected) {
+      r -= (weights[name] || 1);
+      if (r <= 0) return name;
+    }
+    return selected[selected.length - 1];
+  }
+
+  // Word variety weight: inversely proportional to how many times it's been used
+  function wordVarietyWeight(word) {
+    const uses = room.wordUsedCount[word] || 0;
+    if (uses === 0) return 4;
+    if (uses === 1) return 2;
+    return 1;
+  }
+
+  function pickWordFromList(listName) {
+    const list = wordLists[listName];
+    const totalW = list.reduce((s, w) => s + wordVarietyWeight(w), 0);
+    let r = Math.random() * totalW;
+    for (const word of list) {
+      r -= wordVarietyWeight(word);
+      if (r <= 0) return word;
+    }
+    return list[list.length - 1];
+  }
+
+  if (room.options.combinations) {
+    const pairs = [];
+    const usedPairs = new Set();
+    let attempts = 0;
+    while (pairs.length < count && attempts < 300) {
+      attempts++;
+      const w1 = pickWordFromList(pickList());
+      const w2 = pickWordFromList(pickList());
+      if (w1 !== w2) {
+        const key = [w1, w2].sort().join('+');
+        if (!usedPairs.has(key)) {
+          usedPairs.add(key);
+          pairs.push(`${w1}+${w2}`);
+        }
+      }
+    }
+    return pairs;
+  }
+
+  const result = [];
+  const used = new Set();
+  let attempts = 0;
+
+  while (result.length < count && attempts < 300) {
+    attempts++;
+    const listName = pickList();
+    const word = pickWordFromList(listName);
+    if (!used.has(word)) {
+      used.add(word);
+      result.push(word);
+    }
+  }
+
+  return result;
 }
 
 function maskWord(word) {
-  return word.split('').map(c => c === ' ' ? ' ' : '_').join('');
+  return word.split('').map(c => (c === ' ' || c === '+') ? c : '_').join('');
 }
 
-function hintWord(word, revealCount) {
+// Random hints: reveals `additionalCount` new random letters beyond already-revealed ones.
+// `revealedIndices` is mutated in place.
+function giveHint(word, revealedIndices, additionalCount) {
   const chars = word.split('');
-  const indices = chars.map((c, i) => c !== ' ' ? i : -1).filter(i => i !== -1);
-  const toReveal = indices.slice(0, revealCount);
+  const allIndices = chars.map((c, i) => c !== ' ' ? i : -1).filter(i => i !== -1);
+  const unrevealed = allIndices.filter(i => !revealedIndices.includes(i));
+  const shuffled = unrevealed.sort(() => Math.random() - 0.5);
+  const newReveal = shuffled.slice(0, additionalCount);
+  revealedIndices.push(...newReveal);
   return chars.map((c, i) => {
     if (c === ' ') return ' ';
-    if (toReveal.includes(i)) return c;
+    if (revealedIndices.includes(i)) return c;
     return '_';
   }).join('');
 }
@@ -59,17 +138,30 @@ function createRoom(hostId, hostName) {
     id: roomId,
     players: [],
     host: hostId,
-    state: 'lobby', // lobby | choosing | drawing | roundEnd | gameEnd
+    state: 'lobby',
     round: 0,
     currentDrawerIndex: 0,
     currentWord: null,
     wordChoices: [],
     timer: null,
     timeLeft: 0,
-    drawHistory: [],
+    strokes: [],        // array of stroke arrays, for undo
+    currentStroke: [],  // draw events since last strokeEnd
+    drawHistory: [],    // flat replay list
     scores: {},
     guessedPlayers: new Set(),
     hintsGiven: 0,
+    revealedIndices: [],
+    selectedLists: Object.keys(wordLists),
+    listWeights: {},    // listName -> 1-5
+    wordUsedCount: {},  // word -> times chosen this game
+    options: {
+      wordChoices: 3,
+      roundTime: 80,
+      hintCount: 2,
+      combinations: false,
+      hidden: false,
+    },
   };
   return roomId;
 }
@@ -121,8 +213,15 @@ function getRoomPublicState(room) {
     host: room.host,
     currentDrawerId: room.players[room.currentDrawerIndex]?.id || null,
     timeLeft: room.timeLeft,
-    wordLength: room.currentWord ? room.currentWord.length : 0,
-    wordSpaces: room.currentWord ? maskWord(room.currentWord) : null,
+    wordLength: (room.currentWord && !room.options.hidden) ? room.currentWord.length : 0,
+    wordSpaces: (room.currentWord && !room.options.hidden) ? maskWord(room.currentWord) : null,
+    hiddenMode: !!(room.options && room.options.hidden),
+    wordLists: {
+      available: Object.keys(wordLists).map(name => ({ name, count: wordLists[name].length })),
+      selected: room.selectedLists,
+      weights: room.listWeights,
+    },
+    options: { ...room.options },
   };
 }
 
@@ -131,12 +230,14 @@ function startRound(roomId) {
   if (!room) return;
   clearRoomTimer(room);
 
+  room.strokes = [];
+  room.currentStroke = [];
   room.drawHistory = [];
   room.guessedPlayers = new Set();
   room.hintsGiven = 0;
+  room.revealedIndices = [];
   room.currentWord = null;
 
-  // Pick drawer
   if (room.currentDrawerIndex >= room.players.length) {
     room.currentDrawerIndex = 0;
     room.round++;
@@ -150,9 +251,9 @@ function startRound(roomId) {
   const drawer = room.players[room.currentDrawerIndex];
   if (!drawer) { endGame(roomId); return; }
 
-  room.wordChoices = getRandomWords(WORD_CHOICES);
+  room.wordChoices = getRandomWords(room, room.options.wordChoices);
   room.state = 'choosing';
-  room.timeLeft = 15;
+  room.timeLeft = 20;
 
   io.to(roomId).emit('roundStart', {
     ...getRoomPublicState(room),
@@ -160,18 +261,15 @@ function startRound(roomId) {
     drawerName: drawer.name,
   });
 
-  // Send word choices only to drawer
   io.to(drawer.id).emit('wordChoices', { words: room.wordChoices });
 
-  // Auto-pick if drawer doesn't choose
   room.timer = setInterval(() => {
     room.timeLeft--;
     io.to(roomId).emit('timerTick', { timeLeft: room.timeLeft });
     if (room.timeLeft <= 0) {
       clearRoomTimer(room);
       if (room.state === 'choosing') {
-        const autoWord = room.wordChoices[0];
-        wordChosen(roomId, autoWord);
+        wordChosen(roomId, room.wordChoices[0]);
       }
     }
   }, 1000);
@@ -183,9 +281,13 @@ function wordChosen(roomId, word) {
   clearRoomTimer(room);
 
   room.currentWord = word;
+  room.wordUsedCount[word] = (room.wordUsedCount[word] || 0) + 1;
   room.state = 'drawing';
-  room.timeLeft = ROUND_TIME;
+  room.timeLeft = room.options.roundTime;
+  room.strokes = [];
+  room.currentStroke = [];
   room.drawHistory = [];
+  room.revealedIndices = [];
 
   const drawer = room.players[room.currentDrawerIndex];
   const masked = maskWord(word);
@@ -197,26 +299,34 @@ function wordChosen(roomId, word) {
     drawerName: drawer.name,
   });
 
-  // Drawer gets the actual word
   io.to(drawer.id).emit('yourWord', { word });
+
+  const roundTime = room.options.roundTime;
+  const hintCount = room.options.hintCount;
+  const skipHints = room.options.hidden || room.options.combinations;
+  // Spread hints evenly across the round
+  const hintTimes = [];
+  if (!skipHints) {
+    for (let i = 1; i <= hintCount; i++) {
+      hintTimes.push(Math.floor(roundTime * (hintCount - i + 1) / (hintCount + 1)));
+    }
+  }
 
   room.timer = setInterval(() => {
     room.timeLeft--;
 
-    // Give hints at 2/3 and 1/3 time
-    const hintAt2 = Math.floor(ROUND_TIME * 2 / 3);
-    const hintAt1 = Math.floor(ROUND_TIME * 1 / 3);
-    const wordChars = word.replace(/ /g, '').length;
-    const maxHints = Math.max(1, Math.floor(wordChars / 3));
+    if (!skipHints) {
+      const wordChars = word.replace(/ /g, '').length;
+      const lettersPerHint = Math.max(1, Math.floor(wordChars / (hintCount + 1)));
 
-    if (room.timeLeft === hintAt2 && room.hintsGiven < maxHints) {
-      room.hintsGiven = 1;
-      const hint = hintWord(word, 1);
-      io.to(roomId).emit('hint', { hint });
-    } else if (room.timeLeft === hintAt1 && room.hintsGiven < maxHints) {
-      room.hintsGiven = 2;
-      const hint = hintWord(word, 2);
-      io.to(roomId).emit('hint', { hint });
+      for (let i = 0; i < hintTimes.length; i++) {
+        if (room.timeLeft === hintTimes[i] && room.hintsGiven === i) {
+          room.hintsGiven = i + 1;
+          const hint = giveHint(word, room.revealedIndices, lettersPerHint);
+          io.to(roomId).emit('hint', { hint });
+          break;
+        }
+      }
     }
 
     io.to(roomId).emit('timerTick', { timeLeft: room.timeLeft });
@@ -243,7 +353,7 @@ function endDrawingRound(roomId) {
 
   setTimeout(() => {
     if (rooms[roomId]) startRound(roomId);
-  }, 5000);
+  }, 6000);
 }
 
 function endGame(roomId) {
@@ -258,12 +368,12 @@ function endGame(roomId) {
 
   io.to(roomId).emit('gameEnd', { finalScores });
 
-  // Reset for new game
   setTimeout(() => {
     if (rooms[roomId]) {
       room.state = 'lobby';
       room.round = 0;
       room.currentDrawerIndex = 0;
+      room.wordUsedCount = {};
       room.players.forEach(p => { room.scores[p.id] = 0; });
       io.to(roomId).emit('backToLobby', getRoomPublicState(room));
     }
@@ -308,8 +418,36 @@ io.on('connection', (socket) => {
 
     room.round = 1;
     room.currentDrawerIndex = 0;
+    room.wordUsedCount = {};
     room.players.forEach(p => { room.scores[p.id] = 0; });
     startRound(currentRoom);
+  });
+
+  socket.on('setWordLists', ({ lists, weights }) => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room || room.host !== socket.id || room.state !== 'lobby') return;
+    const valid = lists.filter(l => wordLists[l]);
+    room.selectedLists = valid.length > 0 ? valid : Object.keys(wordLists);
+    if (weights && typeof weights === 'object') {
+      room.listWeights = {};
+      for (const [name, w] of Object.entries(weights)) {
+        if (wordLists[name]) room.listWeights[name] = Math.max(1, Math.min(5, Number(w) || 1));
+      }
+    }
+    io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
+  });
+
+  socket.on('setGameOptions', ({ options }) => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room || room.host !== socket.id || room.state !== 'lobby') return;
+    if (options.wordChoices !== undefined) room.options.wordChoices = Math.max(2, Math.min(6, parseInt(options.wordChoices) || 3));
+    if (options.roundTime !== undefined) room.options.roundTime = Math.max(15, Math.min(180, parseInt(options.roundTime) || 80));
+    if (options.hintCount !== undefined) room.options.hintCount = Math.max(0, Math.min(5, parseInt(options.hintCount) || 2));
+    if (options.combinations !== undefined) room.options.combinations = !!options.combinations;
+    if (options.hidden !== undefined) room.options.hidden = !!options.hidden;
+    io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
   });
 
   socket.on('chooseWord', ({ word }) => {
@@ -329,8 +467,34 @@ io.on('connection', (socket) => {
     if (!room || room.state !== 'drawing') return;
     const drawer = room.players[room.currentDrawerIndex];
     if (!drawer || drawer.id !== socket.id) return;
+    room.currentStroke.push(data);
     room.drawHistory.push(data);
     socket.to(currentRoom).emit('draw', data);
+  });
+
+  socket.on('strokeEnd', () => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room || room.state !== 'drawing') return;
+    const drawer = room.players[room.currentDrawerIndex];
+    if (!drawer || drawer.id !== socket.id) return;
+    if (room.currentStroke.length > 0) {
+      room.strokes.push(room.currentStroke);
+      room.currentStroke = [];
+    }
+  });
+
+  socket.on('undo', () => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room || room.state !== 'drawing') return;
+    const drawer = room.players[room.currentDrawerIndex];
+    if (!drawer || drawer.id !== socket.id) return;
+    // Discard any in-progress stroke too
+    room.currentStroke = [];
+    if (room.strokes.length > 0) room.strokes.pop();
+    room.drawHistory = room.strokes.flat();
+    io.to(currentRoom).emit('redrawAll', { history: room.drawHistory });
   });
 
   socket.on('clearCanvas', () => {
@@ -339,6 +503,8 @@ io.on('connection', (socket) => {
     if (!room) return;
     const drawer = room.players[room.currentDrawerIndex];
     if (!drawer || drawer.id !== socket.id) return;
+    room.strokes = [];
+    room.currentStroke = [];
     room.drawHistory = [];
     socket.to(currentRoom).emit('clearCanvas');
   });
@@ -348,7 +514,7 @@ io.on('connection', (socket) => {
     const room = getRoom(currentRoom);
     if (!room || room.state !== 'drawing') return;
     const drawer = room.players[room.currentDrawerIndex];
-    if (drawer && drawer.id === socket.id) return; // Drawer can't guess
+    if (drawer && drawer.id === socket.id) return;
     if (room.guessedPlayers.has(socket.id)) return;
 
     const player = room.players.find(p => p.id === socket.id);
@@ -356,14 +522,29 @@ io.on('connection', (socket) => {
 
     const guess = text.trim().toLowerCase();
     const answer = room.currentWord.toLowerCase();
+    let isCorrect = false;
+    let wasAutocorrected = false;
+    let dist = Infinity;
 
-    if (guess === answer) {
+    if (room.options.combinations && answer.includes('+')) {
+      const aParts = answer.split('+').map(p => p.trim());
+      const gParts = guess.split('+').map(p => p.trim());
+      isCorrect = gParts.length === 2 && (
+        (gParts[0] === aParts[0] && gParts[1] === aParts[1]) ||
+        (gParts[0] === aParts[1] && gParts[1] === aParts[0])
+      );
+    } else {
+      dist = levenshtein(guess, answer);
+      isCorrect = guess === answer || (answer.length >= 4 && dist === 1);
+      wasAutocorrected = isCorrect && guess !== answer;
+    }
+
+    if (isCorrect) {
       room.guessedPlayers.add(socket.id);
-      const timeBonus = Math.floor((room.timeLeft / ROUND_TIME) * 500);
+      const timeBonus = Math.floor((room.timeLeft / room.options.roundTime) * 500);
       const points = 100 + timeBonus;
       room.scores[socket.id] = (room.scores[socket.id] || 0) + points;
 
-      // Drawer gets points too
       if (drawer) {
         room.scores[drawer.id] = (room.scores[drawer.id] || 0) + 50;
       }
@@ -372,18 +553,17 @@ io.on('connection', (socket) => {
         playerId: socket.id,
         playerName: player.name,
         points,
+        autocorrected: wasAutocorrected,
         scores: room.players.map(p => ({ id: p.id, name: p.name, score: room.scores[p.id] || 0 })),
       });
 
-      // All non-drawers guessed?
       const nonDrawers = room.players.filter(p => p.id !== drawer?.id);
       if (nonDrawers.every(p => room.guessedPlayers.has(p.id))) {
         clearRoomTimer(room);
         endDrawingRound(currentRoom);
       }
     } else {
-      // Close guess hint
-      const isClose = levenshtein(guess, answer) <= 2 && guess.length > 2;
+      const isClose = dist <= 2 && guess.length > 2;
       io.to(currentRoom).emit('chat', {
         playerId: socket.id,
         playerName: player.name,
@@ -413,9 +593,21 @@ io.on('connection', (socket) => {
     const room = getRoom(currentRoom);
     if (!room) return;
     socket.emit('stateUpdate', getRoomPublicState(room));
-    // Send draw history to catch up
     if (room.drawHistory.length > 0) {
       socket.emit('drawHistory', { history: room.drawHistory });
+    }
+  });
+
+  socket.on('kickPlayer', ({ playerId }) => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room || room.host !== socket.id || room.state !== 'lobby') return;
+    if (playerId === socket.id) return;
+    const targetSocket = io.sockets.sockets.get(playerId);
+    if (targetSocket) targetSocket.emit('kicked');
+    removePlayer(currentRoom, playerId);
+    if (rooms[currentRoom]) {
+      io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
     }
   });
 
@@ -428,7 +620,6 @@ io.on('connection', (socket) => {
     removePlayer(currentRoom, socket.id);
     if (rooms[currentRoom]) {
       io.to(currentRoom).emit('playerLeft', { playerName: name, state: getRoomPublicState(rooms[currentRoom]) });
-      // If current drawer left mid-draw, advance
       if (room.state === 'drawing' || room.state === 'choosing') {
         if (room.players.length < 2) {
           clearRoomTimer(room);
