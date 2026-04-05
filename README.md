@@ -1,5 +1,7 @@
 # 🎨 Mivimoose — Multiplayer Drawing Game
 
+⚠️TS IS SO VIBECODED⚠️
+
 A full-featured multiplayer drawing & guessing game built with **Node.js + Socket.io**.
 
 ## Features
