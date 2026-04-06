@@ -1,6 +1,6 @@
 # 🎨 Mivimoose — Multiplayer Drawing Game
 
-A full-featured multiplayer drawing & guessing game built with **Node.js + Socket.io**.
+A full-featured multiplayer drawing & guessing game built with **Node.js + Socket.io** and Claude. This is fully vibecoded so don't @ me
 
 ## Features
 - 🎨 Real-time drawing canvas synced across all players

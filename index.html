@@ -688,6 +688,9 @@
       pointer-events: none;
     }
     #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* Visible gap between words in the word display */
+    .word-gap { display: inline-block; width: 1em; min-width: 1em; }
   </style>
 </head>
 <body>
@@ -784,6 +787,14 @@
           <input type="checkbox" id="opt-hidden" onchange="sendGameOption('hidden', this.checked)" style="accent-color:var(--accent2);width:16px;height:16px;cursor:pointer" />
           <span style="font-size:0.85rem;color:var(--text-dim)">No hints or letter count</span>
         </label>
+      </div>
+      <div class="option-item">
+        <label>Autocorrect</label>
+        <select id="opt-autocorrect" onchange="sendGameOption('autocorrectStrength', parseInt(this.value))">
+          <option value="0">Off (exact match)</option>
+          <option value="1" selected>Easy (1 letter off)</option>
+          <option value="2">Hard (2 letters off)</option>
+        </select>
       </div>
     </div>
   </div>
@@ -902,6 +913,19 @@
   let clientStrokes = [];       // array of stroke arrays, mirrors server
   let currentClientStroke = []; // events in current stroke
   let lastRoundImageUrl = null; // saved canvas for download
+
+  let myLockedPart = null; // locked combination part for current round
+
+  // ── SOUNDS ──
+  const audioCache = {};
+  function playSound(name) {
+    try {
+      if (!audioCache[name]) audioCache[name] = new Audio(`/sounds/${name}.mp3`);
+      const s = audioCache[name];
+      s.currentTime = 0;
+      s.play().catch(() => {});
+    } catch (e) {}
+  }
 
   const COLORS = [
     '#000000','#ffffff','#ff3b30','#ff9500','#ffcc00','#34c759',
@@ -1044,11 +1068,13 @@
     const hc = document.getElementById('opt-hint-count');
     const comb = document.getElementById('opt-combinations');
     const hid = document.getElementById('opt-hidden');
+    const ac = document.getElementById('opt-autocorrect');
     if (wc) wc.value = String(opts.wordChoices || 3);
     if (rt) rt.value = String(opts.roundTime || 80);
     if (hc) hc.value = String(opts.hintCount ?? 2);
     if (comb) comb.checked = !!opts.combinations;
     if (hid) hid.checked = !!opts.hidden;
+    if (ac) ac.value = String(opts.autocorrectStrength ?? 1);
   }
 
   function sendGameOption(key, value) {
@@ -1275,10 +1301,10 @@
     if (!isMyTurn) return;
     currentClientStroke = [];
     if (clientStrokes.length > 0) clientStrokes.pop();
-    // Redraw locally
+    // Redraw locally from history (handles clear markers correctly)
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    clientStrokes.flat().forEach(d => applyDraw(d));
+    buildClientHistory(clientStrokes).forEach(d => applyDraw(d));
     socket.emit('undo');
   }
 
@@ -1309,9 +1335,18 @@
   function clearCanvas() {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    clientStrokes = [];
+    clientStrokes.push('clear'); // marker so undo can restore pre-clear state
     currentClientStroke = [];
     socket.emit('clearCanvas');
+  }
+
+  // Rebuild draw history from client strokes, stopping at the last clear marker
+  function buildClientHistory(strokes) {
+    let startIdx = -1;
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      if (strokes[i] === 'clear') { startIdx = i; break; }
+    }
+    return [].concat(...strokes.slice(startIdx + 1).filter(s => Array.isArray(s)));
   }
 
   function setTool(tool) {
@@ -1392,7 +1427,10 @@
       el.textContent = word;
       el.classList.add('revealed');
     } else {
-      el.textContent = word.split('').join(' ');
+      // Split by spaces to preserve word boundaries as visible gaps
+      const wordParts = word.split(' ');
+      const formattedParts = wordParts.map(part => part.split('').join(' '));
+      el.innerHTML = formattedParts.join('<span class="word-gap"></span>');
       el.classList.remove('revealed');
     }
   }
@@ -1441,6 +1479,7 @@
     gameState = state;
     hasGuessedPlayers = new Set();
     hasGuessedCorrect = false;
+    myLockedPart = null;
     showScreen('screen-game');
     document.getElementById('word-choice-overlay').style.display = 'none';
     document.getElementById('choosing-overlay').style.display = 'none';
@@ -1454,24 +1493,39 @@
     currentClientStroke = [];
     lastRoundImageUrl = null;
     document.getElementById('download-drawing-btn').style.display = 'none';
+    document.getElementById('chat-input').placeholder = 'Type your guess...';
 
     // Clear chat
     document.getElementById('chat-messages').innerHTML = '';
     addChat({ system: true, text: `🎨 Round ${state.round} — ${state.drawerName} is choosing a word!` });
   });
 
-  socket.on('wordChoices', ({ words }) => {
+  socket.on('wordChoices', ({ words, part, firstWord }) => {
     showScreen('screen-game');
     const overlay = document.getElementById('word-choice-overlay');
+    const titleEl = overlay.querySelector('h3');
     const container = document.getElementById('word-choices-container');
     container.innerHTML = '';
+
+    if (part === 2) {
+      titleEl.textContent = `🖌️ You picked "${firstWord}" — now pick the second word!`;
+    } else {
+      titleEl.textContent = '🖌️ Choose a word to draw!';
+    }
+
     words.forEach(word => {
       const btn = document.createElement('button');
       btn.className = 'word-choice-btn';
       btn.textContent = word;
       btn.onclick = () => {
+        if (part === 1) {
+          // Part 1: keep overlay open, show waiting state while server sends part 2
+          titleEl.textContent = `⏳ Picked "${word}"...`;
+          container.innerHTML = '';
+        } else {
+          overlay.style.display = 'none';
+        }
         socket.emit('chooseWord', { word });
-        overlay.style.display = 'none';
       };
       container.appendChild(btn);
     });
@@ -1480,6 +1534,9 @@
 
   socket.on('drawingStart', (state) => {
     gameState = state;
+    myLockedPart = null;
+    document.getElementById('chat-input').placeholder = 'Type your guess...';
+    playSound('bell');
     const amDrawer = state.drawerId === myId;
     setDrawerMode(amDrawer);
     updateScoreboard(state);
@@ -1513,7 +1570,10 @@
     addChat({ system: true, text: `💡 Hint: ${hint.split('').join(' ')}` });
   });
 
-  socket.on('timerTick', ({ timeLeft }) => { updateTimer(timeLeft); });
+  socket.on('timerTick', ({ timeLeft }) => {
+    updateTimer(timeLeft);
+    if (timeLeft === 10) playSound('timertick');
+  });
 
   socket.on('draw', (data) => { applyDraw(data); });
 
@@ -1537,6 +1597,7 @@
   });
 
   socket.on('correctGuess', ({ playerId, playerName, points, autocorrected, scores }) => {
+    playSound('correct');
     hasGuessedPlayers.add(playerId);
     const isMe = playerId === myId;
     if (isMe) {
@@ -1554,6 +1615,13 @@
       });
       updateScoreboard(gameState);
     }
+  });
+
+  socket.on('partLocked', ({ lockedPart }) => {
+    myLockedPart = lockedPart;
+    showToast(`🔒 "${lockedPart}" locked in! Guess the other word!`);
+    addChat({ system: true, text: `🔒 You got one! Now guess the other word.` });
+    document.getElementById('chat-input').placeholder = `Got "${lockedPart}" — type the other word...`;
   });
 
   socket.on('roundEnd', ({ word, scores }) => {
