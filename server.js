@@ -42,9 +42,10 @@ function getRandomWords(room, count) {
 }
 
 function getRandomSingleWords(room, count, exclude = new Set()) {
+  const allLists = { ...wordLists, ...(room.customLists || {}) };
   const selected = (room.selectedLists && room.selectedLists.length > 0)
-    ? room.selectedLists.filter(l => wordLists[l] && wordLists[l].length > 0)
-    : Object.keys(wordLists);
+    ? room.selectedLists.filter(l => allLists[l] && allLists[l].length > 0)
+    : Object.keys(allLists);
 
   if (selected.length === 0) return [];
 
@@ -68,7 +69,7 @@ function getRandomSingleWords(room, count, exclude = new Set()) {
   }
 
   function pickWordFromList(listName) {
-    const list = wordLists[listName];
+    const list = allLists[listName];
     const totalW = list.reduce((s, w) => s + wordVarietyWeight(w), 0);
     let r = Math.random() * totalW;
     for (const word of list) {
@@ -138,6 +139,7 @@ function createRoom(hostId, hostName) {
     selectedLists: Object.keys(wordLists),
     listWeights: {},    // listName -> 1-5
     wordUsedCount: {},  // word -> times chosen this game
+    customLists: {},     // name -> words[] (added by host this session)
     lockedParts: {},     // socketId -> locked combination part string
     combinationPart1: null, // first word chosen in 2-step combination pick
     wordChoicesPart2: [], // valid words for second combination pick
@@ -204,7 +206,10 @@ function getRoomPublicState(room) {
     wordSpaces: (room.currentWord && !room.options.hidden) ? maskWord(room.currentWord) : null,
     hiddenMode: !!(room.options && room.options.hidden),
     wordLists: {
-      available: Object.keys(wordLists).map(name => ({ name, count: wordLists[name].length })),
+      available: [
+        ...Object.keys(wordLists).map(name => ({ name, count: wordLists[name].length })),
+        ...Object.keys(room.customLists || {}).map(name => ({ name, count: room.customLists[name].length, custom: true })),
+      ],
       selected: room.selectedLists,
       weights: room.listWeights,
     },
@@ -312,11 +317,15 @@ function wordChosen(roomId, word) {
   const roundTime = room.options.roundTime;
   const hintCount = room.options.hintCount;
   const skipHints = room.options.hidden || room.options.combinations;
+  // Each hint reveals exactly 1 letter; cap total hints at half the word length
+  const wordChars = word.replace(/ /g, '').replace(/\+/g, '').length;
+  const maxHints = Math.floor(wordChars / 2);
+  const effectiveHintCount = Math.min(hintCount, maxHints);
   // Spread hints evenly across the round
   const hintTimes = [];
-  if (!skipHints) {
-    for (let i = 1; i <= hintCount; i++) {
-      hintTimes.push(Math.floor(roundTime * (hintCount - i + 1) / (hintCount + 1)));
+  if (!skipHints && effectiveHintCount > 0) {
+    for (let i = 1; i <= effectiveHintCount; i++) {
+      hintTimes.push(Math.floor(roundTime * (effectiveHintCount - i + 1) / (effectiveHintCount + 1)));
     }
   }
 
@@ -324,13 +333,10 @@ function wordChosen(roomId, word) {
     room.timeLeft--;
 
     if (!skipHints) {
-      const wordChars = word.replace(/ /g, '').length;
-      const lettersPerHint = Math.max(1, Math.floor(wordChars / (hintCount + 1)));
-
       for (let i = 0; i < hintTimes.length; i++) {
         if (room.timeLeft === hintTimes[i] && room.hintsGiven === i) {
           room.hintsGiven = i + 1;
-          const hint = giveHint(word, room.revealedIndices, lettersPerHint);
+          const hint = giveHint(word, room.revealedIndices, 1); // always reveal 1 letter
           io.to(roomId).emit('hint', { hint });
           break;
         }
@@ -406,7 +412,6 @@ io.on('connection', (socket) => {
     const room = getRoom(roomId);
     if (!room) { socket.emit('error', { message: 'Room not found.' }); return; }
     if (room.players.length >= MAX_PLAYERS) { socket.emit('error', { message: 'Room is full.' }); return; }
-    if (room.state !== 'lobby') { socket.emit('error', { message: 'Game already in progress.' }); return; }
 
     playerName = name || 'Player';
     addPlayer(roomId, socket.id, playerName);
@@ -415,6 +420,11 @@ io.on('connection', (socket) => {
 
     socket.emit('roomJoined', { roomId, state: getRoomPublicState(room) });
     socket.to(roomId).emit('playerJoined', { player: { id: socket.id, name: playerName }, state: getRoomPublicState(room) });
+
+    // If joining mid-game, send current draw history so they can see what's drawn
+    if (room.state === 'drawing' && room.drawHistory.length > 0) {
+      socket.emit('drawHistory', { history: room.drawHistory });
+    }
   });
 
   socket.on('startGame', () => {
@@ -435,8 +445,9 @@ io.on('connection', (socket) => {
     if (!currentRoom) return;
     const room = getRoom(currentRoom);
     if (!room || room.host !== socket.id || room.state !== 'lobby') return;
-    const valid = lists.filter(l => wordLists[l]);
-    room.selectedLists = valid.length > 0 ? valid : Object.keys(wordLists);
+    const allAvailable = { ...wordLists, ...(room.customLists || {}) };
+    const valid = lists.filter(l => allAvailable[l]);
+    room.selectedLists = valid.length > 0 ? valid : Object.keys(allAvailable);
     if (weights && typeof weights === 'object') {
       room.listWeights = {};
       for (const [name, w] of Object.entries(weights)) {
@@ -444,6 +455,22 @@ io.on('connection', (socket) => {
       }
     }
     io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
+  });
+
+  socket.on('addCustomList', ({ name, text }) => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room || room.host !== socket.id || room.state !== 'lobby') return;
+    if (!name || !text) return;
+    const cleanName = name.trim().slice(0, 30).replace(/[^a-zA-Z0-9 _-]/g, '').trim();
+    if (!cleanName) return;
+    const words = text.split(/[\n,]+/).map(w => w.trim()).filter(w => w.length > 0).slice(0, 1000);
+    if (words.length === 0) return;
+    if (!room.customLists) room.customLists = {};
+    room.customLists[cleanName] = words;
+    if (!room.selectedLists.includes(cleanName)) room.selectedLists.push(cleanName);
+    io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
+    socket.emit('customListAdded', { name: cleanName, count: words.length });
   });
 
   socket.on('setGameOptions', ({ options }) => {
@@ -583,11 +610,11 @@ io.on('connection', (socket) => {
     if (isCorrect) {
       room.guessedPlayers.add(socket.id);
       const timeBonus = Math.floor((room.timeLeft / room.options.roundTime) * 500);
-      const points = 100 + timeBonus;
+      const points = Math.round((100 + timeBonus) / 25) * 25;
       room.scores[socket.id] = (room.scores[socket.id] || 0) + points;
 
       if (drawer) {
-        room.scores[drawer.id] = (room.scores[drawer.id] || 0) + 50;
+        room.scores[drawer.id] = (room.scores[drawer.id] || 0) + 25;
       }
 
       io.to(currentRoom).emit('correctGuess', {
@@ -637,6 +664,19 @@ io.on('connection', (socket) => {
     if (room.drawHistory.length > 0) {
       socket.emit('drawHistory', { history: room.drawHistory });
     }
+  });
+
+  socket.on('changeName', ({ name }) => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room) return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player) return;
+    const newName = (name || '').trim().slice(0, 20);
+    if (!newName) return;
+    player.name = newName;
+    playerName = newName;
+    io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
   });
 
   socket.on('kickPlayer', ({ playerId }) => {

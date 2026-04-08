@@ -53,8 +53,28 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       letter-spacing: -1px;
+      cursor: pointer;
+      border: none;
+      padding: 0;
+      text-decoration: none;
     }
+    .logo:hover { filter: brightness(1.15); }
     .logo span { font-size: 1.5rem; }
+    .btn-support {
+      background: none;
+      border: 2px solid var(--accent2);
+      color: var(--accent2);
+      padding: 7px 16px;
+      border-radius: 10px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s, color 0.2s;
+      letter-spacing: 0.5px;
+    }
+    .btn-support:hover { background: var(--accent2); color: var(--bg); }
     #room-badge {
       background: var(--surface2);
       border: 1px solid var(--border);
@@ -68,7 +88,7 @@
     }
 
     /* ── SCREENS ── */
-    .screen { display: none; width: 100%; max-width: 1200px; padding: 24px 16px; }
+    .screen { display: none; width: 100%; max-width: 1440px; padding: 24px 16px; }
     .screen.active { display: flex; flex-direction: column; align-items: center; }
 
     /* ── LOBBY / MENU ── */
@@ -223,7 +243,6 @@
       letter-spacing: 6px;
       color: var(--text);
       text-align: center;
-      flex: 1;
     }
     #word-display.revealed { color: var(--accent2); }
     .timer-box {
@@ -242,16 +261,17 @@
     .timer-box.urgent { color: var(--accent); animation: pulse 0.5s infinite alternate; }
     @keyframes pulse { from { opacity: 1; } to { opacity: 0.5; } }
     #round-info {
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: var(--text-dim);
+      font-family: 'Baloo 2', cursive;
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: var(--accent2);
       white-space: nowrap;
     }
 
     .game-main {
       width: 100%;
       display: grid;
-      grid-template-columns: 180px 1fr 260px;
+      grid-template-columns: 220px 1fr 290px;
       gap: 12px;
       align-items: start;
     }
@@ -429,7 +449,8 @@
       border-radius: var(--radius);
       display: flex;
       flex-direction: column;
-      height: 520px;
+      height: 680px;
+      overflow: hidden;
     }
     .chat-panel .sidebar-title { flex-shrink: 0; }
     #chat-messages {
@@ -465,9 +486,11 @@
     .chat-input-row {
       display: flex;
       gap: 8px;
-      padding: 10px;
+      padding: 8px 10px;
       border-top: 2px solid var(--border);
       flex-shrink: 0;
+      align-items: center;
+      box-sizing: border-box;
     }
     .chat-input-row input {
       flex: 1;
@@ -487,11 +510,14 @@
       border: none;
       border-radius: 8px;
       color: #fff;
-      padding: 0 16px;
+      padding: 0 14px;
       font-family: 'Nunito', sans-serif;
       font-weight: 800;
       cursor: pointer;
       transition: filter 0.15s;
+      flex-shrink: 0;
+      height: 38px;
+      align-self: center;
     }
     .chat-input-row button:hover { filter: brightness(1.15); }
     #chat-disabled-msg {
@@ -630,7 +656,27 @@
     .wl-label.checked { border-color: var(--accent2); background: rgba(245,166,35,0.1); }
     .wl-count { font-size: 0.75rem; color: var(--text-dim); font-weight: 600; }
     .wl-weight-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.75rem; color: var(--text-dim); }
-    .wl-weight-slider { flex: 1; accent-color: var(--accent2); height: 4px; cursor: pointer; }
+    .wl-weight-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+      accent-color: var(--accent2);
+    }
+    .wl-weight-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: var(--accent2);
+      cursor: grab;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    }
+    .wl-weight-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.15); }
+    .wl-weight-slider:disabled { opacity: 0.4; cursor: not-allowed; }
+    .wl-weight-slider:disabled::-webkit-slider-thumb { cursor: not-allowed; }
     .wl-weight-val { font-weight: 800; color: var(--accent2); min-width: 12px; text-align: right; }
 
     /* Game options panel */
@@ -642,7 +688,7 @@
       width: 100%;
     }
     .game-options-panel h3 { font-family: 'Baloo 2', cursive; font-size: 1.2rem; color: var(--accent2); margin-bottom: 14px; }
-    .options-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+    .options-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
     .option-item { display: flex; flex-direction: column; gap: 6px; }
     .option-item label { font-size: 0.8rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
     .option-item select, .option-item input[type="number"] {
@@ -659,6 +705,29 @@
       transition: border-color 0.2s;
     }
     .option-item select:focus, .option-item input[type="number"]:focus { border-color: var(--accent2); }
+    .option-slider-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+      height: 110px;
+    }
+    .option-slider {
+      -webkit-appearance: slider-vertical;
+      writing-mode: vertical-lr;
+      direction: rtl;
+      height: 90px;
+      width: 22px;
+      cursor: pointer;
+      accent-color: var(--accent2);
+      outline: none;
+    }
+    .option-val {
+      font-weight: 900;
+      color: var(--accent2);
+      font-size: 0.95rem;
+      white-space: nowrap;
+    }
 
     /* Download button */
     .btn-download { background: var(--surface2); color: var(--text); border: 2px solid var(--accent2); margin-top: 12px; font-size: 0.85rem; padding: 8px 18px; }
@@ -691,13 +760,30 @@
 
     /* Visible gap between words in the word display */
     .word-gap { display: inline-block; width: 1em; min-width: 1em; }
+
+    /* Word display wrapper and letter counts */
+    .word-display-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    #word-letter-counts {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-dim);
+      letter-spacing: 4px;
+      min-height: 1em;
+    }
   </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">Mivimoose<span>🎨</span></div>
+  <button class="logo" onclick="goHome()">Mivimoose<span>🎨</span></button>
   <div id="room-badge"></div>
+  <a href="https://donate.wikimedia.org" target="_blank" rel="noopener" class="btn-support">Support me</a>
 </header>
 
 <div id="toast"></div>
@@ -730,6 +816,18 @@
       <div class="copy-hint">Click to copy</div>
       <br/>
       <p style="font-size:0.85rem;color:var(--text-dim)">Share this code with friends to invite them!</p>
+      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
+        <p style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Your Name</p>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="lobby-name-input" maxlength="20" placeholder="Enter new name..."
+            style="flex:1;background:var(--bg);border:2px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:'Nunito',sans-serif;font-size:0.9rem;font-weight:600;outline:none;" />
+          <button class="btn btn-secondary" onclick="changeName()" style="padding:8px 14px;font-size:0.85rem;">✏️</button>
+        </div>
+      </div>
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+        <p style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Theme Color</p>
+        <div id="theme-swatches" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      </div>
     </div>
     <div class="players-grid">
       <h3>Players <span id="lobby-player-count" style="color:var(--text-dim);font-size:0.9rem">(0/8)</span></h3>
@@ -740,39 +838,51 @@
     <h3>📚 Word Lists</h3>
     <p class="hint">Check the lists to include. Words are drawn evenly across all selected lists.</p>
     <div class="word-list-checks" id="word-list-checks"></div>
+    <div id="custom-list-form" style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px;display:flex;flex-direction:column;gap:10px;">
+      <p style="font-size:0.8rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;">Add Custom List</p>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="custom-list-name" placeholder="List name..." maxlength="30"
+          style="flex:1;background:var(--bg);border:2px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:'Nunito',sans-serif;font-size:0.9rem;font-weight:600;outline:none;" />
+      </div>
+      <textarea id="custom-list-words" placeholder="One word per line (or comma-separated)..." rows="4"
+        style="width:100%;background:var(--bg);border:2px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:'Nunito',sans-serif;font-size:0.9rem;font-weight:600;outline:none;resize:vertical;min-height:80px;"></textarea>
+      <button class="btn btn-secondary" onclick="submitCustomList()" style="align-self:flex-start;padding:8px 18px;font-size:0.85rem;">➕ Add List</button>
+    </div>
   </div>
   <div id="game-options-panel" class="game-options-panel" style="display:none">
     <h3>⚙️ Game Options</h3>
     <div class="options-grid">
       <div class="option-item">
         <label>Word Choices</label>
-        <select id="opt-word-choices" onchange="sendGameOption('wordChoices', this.value)">
-          <option value="2">2 words</option>
-          <option value="3" selected>3 words</option>
-          <option value="4">4 words</option>
-          <option value="5">5 words</option>
-          <option value="6">6 words</option>
-        </select>
+        <div class="option-slider-row">
+          <input type="range" class="option-slider" id="opt-word-choices" min="2" max="6" step="1" value="3"
+            oninput="optSliderUpdate(this,'wordChoices')" />
+          <span class="option-val" id="opt-word-choices-val">3 words</span>
+        </div>
       </div>
       <div class="option-item">
         <label>Time Limit</label>
-        <select id="opt-round-time" onchange="sendGameOption('roundTime', this.value)">
-          <option value="30">30 seconds</option>
-          <option value="60">60 seconds</option>
-          <option value="80" selected>80 seconds</option>
-          <option value="120">120 seconds</option>
-          <option value="180">180 seconds</option>
-        </select>
+        <div class="option-slider-row">
+          <input type="range" class="option-slider" id="opt-round-time" min="30" max="180" step="10" value="80"
+            oninput="optSliderUpdate(this,'roundTime')" />
+          <span class="option-val" id="opt-round-time-val">80s</span>
+        </div>
       </div>
       <div class="option-item">
         <label>Hints</label>
-        <select id="opt-hint-count" onchange="sendGameOption('hintCount', this.value)">
-          <option value="0">No hints</option>
-          <option value="1">1 hint</option>
-          <option value="2" selected>2 hints</option>
-          <option value="3">3 hints</option>
-          <option value="5">5 hints</option>
-        </select>
+        <div class="option-slider-row">
+          <input type="range" class="option-slider" id="opt-hint-count" min="0" max="5" step="1" value="2"
+            oninput="optSliderUpdate(this,'hintCount')" />
+          <span class="option-val" id="opt-hint-count-val">2</span>
+        </div>
+      </div>
+      <div class="option-item">
+        <label>Autocorrect</label>
+        <div class="option-slider-row">
+          <input type="range" class="option-slider" id="opt-autocorrect" min="0" max="2" step="1" value="1"
+            oninput="optSliderUpdate(this,'autocorrectStrength')" />
+          <span class="option-val" id="opt-autocorrect-val">Easy</span>
+        </div>
       </div>
       <div class="option-item">
         <label>Combinations</label>
@@ -788,14 +898,6 @@
           <span style="font-size:0.85rem;color:var(--text-dim)">No hints or letter count</span>
         </label>
       </div>
-      <div class="option-item">
-        <label>Autocorrect</label>
-        <select id="opt-autocorrect" onchange="sendGameOption('autocorrectStrength', parseInt(this.value))">
-          <option value="0">Off (exact match)</option>
-          <option value="1" selected>Easy (1 letter off)</option>
-          <option value="2">Hard (2 letters off)</option>
-        </select>
-      </div>
     </div>
   </div>
   <button class="btn btn-success" id="lobby-start-btn" onclick="startGame()">🚀 Start Game</button>
@@ -806,7 +908,10 @@
 <div id="screen-game" class="screen">
   <div class="game-top-bar">
     <div id="round-info">Round 1 / 3</div>
-    <div id="word-display">_ _ _ _ _</div>
+    <div class="word-display-wrap">
+      <div id="word-display">_ _ _ _ _</div>
+      <div id="word-letter-counts"></div>
+    </div>
     <div class="timer-box" id="timer">80</div>
   </div>
 
@@ -821,6 +926,7 @@
     <div class="canvas-area">
       <div id="canvas-container">
         <canvas id="main-canvas"></canvas>
+        <canvas id="preview-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
 
         <!-- Overlay: waiting for game to start / round end -->
         <div id="canvas-overlay">
@@ -846,12 +952,17 @@
         <button class="tool-btn active" id="tool-pen" onclick="setTool('pen')" title="Pen">✏️</button>
         <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')" title="Eraser">🧹</button>
         <button class="tool-btn" id="tool-fill" onclick="setTool('fill')" title="Fill">🪣</button>
+        <button class="tool-btn" id="tool-rect" onclick="setTool('rect')" title="Rectangle">▭</button>
+        <button class="tool-btn" id="tool-circle" onclick="setTool('circle')" title="Circle">◯</button>
         <div class="sep"></div>
         <input type="range" class="size-slider" id="brush-size" min="2" max="40" value="6" />
         <div class="sep"></div>
-        <div class="colors-row" id="color-swatches">
-          <div class="color-swatch color-wheel-swatch" title="Pick custom color" onclick="openColorPicker()"></div>
-          <input type="color" id="color-picker-input" value="#000000" style="opacity:0;position:absolute;width:0;height:0;pointer-events:none" />
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div class="colors-row" id="color-swatches-default"></div>
+          <div class="colors-row" id="color-swatches">
+            <div class="color-swatch color-wheel-swatch" title="Pick custom color" onclick="openColorPicker()"></div>
+            <input type="color" id="color-picker-input" value="#000000" style="opacity:0;position:absolute;width:0;height:0;pointer-events:none" />
+          </div>
         </div>
         <div class="sep"></div>
         <button class="tool-btn" onclick="undoStroke()" title="Undo (Ctrl+Z)">↩️</button>
@@ -950,11 +1061,26 @@
 
   let recentColors = [];
 
+  const DEFAULT_COLORS = [
+    '#000000','#ffffff','#ff3b30','#ff9500','#ffcc00','#34c759',
+    '#5ac8fa','#007aff','#5856d6','#ff2d55','#a2845e','#636366',
+  ];
+
   function buildColorSwatches() {
     document.getElementById('color-picker-input').addEventListener('input', (e) => {
       selectColor(e.target.value);
     });
-    recentColors = ['#000000', '#ffffff', '#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#007aff', '#5856d6'];
+    // Render 12 default color swatches in the top row
+    const defaultRow = document.getElementById('color-swatches-default');
+    DEFAULT_COLORS.forEach(color => {
+      const el = document.createElement('div');
+      el.className = 'color-swatch' + (color === currentColor ? ' active' : '');
+      el.style.background = color;
+      if (color === '#ffffff') el.style.border = '2px solid #555';
+      el.onclick = () => selectColor(color);
+      defaultRow.appendChild(el);
+    });
+    recentColors = [];
     renderRecentColors();
   }
 
@@ -964,7 +1090,7 @@
     currentColor = color;
     document.getElementById('color-picker-input').value = color;
     if (currentTool === 'eraser') setTool('pen');
-    addRecentColor(color);
+    renderRecentColors(); // update active state without adding to recent
   }
 
   function addRecentColor(color) {
@@ -983,6 +1109,16 @@
       el.onclick = () => selectColor(color);
       container.appendChild(el);
     });
+    // Sync active state on default swatches
+    document.getElementById('color-swatches-default').querySelectorAll('.color-swatch').forEach(el => {
+      el.classList.toggle('active', el.style.background === currentColor || rgbToHex(el.style.background) === currentColor);
+    });
+  }
+
+  function rgbToHex(rgb) {
+    const m = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+    if (!m) return rgb;
+    return '#' + [m[1],m[2],m[3]].map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
   }
 
   function getPlayerAvatar(id) {
@@ -1013,6 +1149,13 @@
     socket.emit('joinRoom', { roomId: code, name });
   }
 
+  function goHome() {
+    // Only navigate home if not in an active game
+    roomId = null;
+    document.getElementById('room-badge').style.display = 'none';
+    showScreen('screen-menu');
+  }
+
   function showError(msg) { document.getElementById('error-msg').textContent = msg; }
 
   // ── LOBBY ──
@@ -1021,7 +1164,10 @@
     document.getElementById('room-badge').textContent = roomId;
     document.getElementById('room-badge').style.display = 'block';
     document.getElementById('lobby-room-code').textContent = roomId;
+    document.getElementById('lobby-name-input').value = '';
+    document.getElementById('lobby-name-input').placeholder = myName || 'Enter new name...';
     updateLobby(state);
+    buildThemeSwatches();
     showScreen('screen-lobby');
   }
 
@@ -1062,6 +1208,19 @@
     if (isHost && state.options) syncGameOptions(state.options);
   }
 
+  const AUTOCORRECT_LABELS = ['Off', 'Easy', 'Hard'];
+
+  function optSliderUpdate(el, key) {
+    const v = parseInt(el.value);
+    sendGameOption(key, v);
+    const valEl = document.getElementById(el.id + '-val');
+    if (!valEl) return;
+    if (key === 'wordChoices') valEl.textContent = v + ' words';
+    else if (key === 'roundTime') valEl.textContent = v + 's';
+    else if (key === 'autocorrectStrength') valEl.textContent = AUTOCORRECT_LABELS[v] || v;
+    else valEl.textContent = v;
+  }
+
   function syncGameOptions(opts) {
     const wc = document.getElementById('opt-word-choices');
     const rt = document.getElementById('opt-round-time');
@@ -1069,12 +1228,12 @@
     const comb = document.getElementById('opt-combinations');
     const hid = document.getElementById('opt-hidden');
     const ac = document.getElementById('opt-autocorrect');
-    if (wc) wc.value = String(opts.wordChoices || 3);
-    if (rt) rt.value = String(opts.roundTime || 80);
-    if (hc) hc.value = String(opts.hintCount ?? 2);
+    if (wc) { wc.value = String(opts.wordChoices || 3); document.getElementById('opt-word-choices-val').textContent = (opts.wordChoices || 3) + ' words'; }
+    if (rt) { rt.value = String(opts.roundTime || 80); document.getElementById('opt-round-time-val').textContent = (opts.roundTime || 80) + 's'; }
+    if (hc) { hc.value = String(opts.hintCount ?? 2); document.getElementById('opt-hint-count-val').textContent = opts.hintCount ?? 2; }
     if (comb) comb.checked = !!opts.combinations;
     if (hid) hid.checked = !!opts.hidden;
-    if (ac) ac.value = String(opts.autocorrectStrength ?? 1);
+    if (ac) { ac.value = String(opts.autocorrectStrength ?? 1); document.getElementById('opt-autocorrect-val').textContent = AUTOCORRECT_LABELS[opts.autocorrectStrength ?? 1] || (opts.autocorrectStrength ?? 1); }
   }
 
   function sendGameOption(key, value) {
@@ -1109,7 +1268,7 @@
 
       const weightRow = document.createElement('div');
       weightRow.className = 'wl-weight-row';
-      weightRow.innerHTML = `Weight: <input type="range" class="wl-weight-slider" min="1" max="5" value="${weight}" ${isChecked ? '' : 'disabled'} style="flex:1;accent-color:var(--accent2)" /><span class="wl-weight-val">${weight}</span>`;
+      weightRow.innerHTML = `Weight: <input type="range" class="wl-weight-slider" min="1" max="5" value="${weight}" ${isChecked ? '' : 'disabled'} /><span class="wl-weight-val">${weight}</span>`;
 
       label.querySelector('input').addEventListener('change', (e) => {
         wrap.style.borderColor = e.target.checked ? 'var(--accent2)' : 'var(--border)';
@@ -1146,6 +1305,63 @@
   }
 
   function onWordListChange() { sendWordLists(); }
+
+  function submitCustomList() {
+    const name = document.getElementById('custom-list-name').value.trim();
+    const text = document.getElementById('custom-list-words').value.trim();
+    if (!name) { showToast('Please enter a list name!'); return; }
+    if (!text) { showToast('Please enter some words!'); return; }
+    socket.emit('addCustomList', { name, text });
+  }
+
+  socket.on('customListAdded', ({ name, count }) => {
+    showToast(`✅ Added "${name}" with ${count} words!`);
+    document.getElementById('custom-list-name').value = '';
+    document.getElementById('custom-list-words').value = '';
+  });
+
+  function changeName() {
+    const input = document.getElementById('lobby-name-input');
+    const name = input.value.trim();
+    if (!name) { showToast('Please enter a name!'); return; }
+    myName = name;
+    socket.emit('changeName', { name });
+    input.value = '';
+    showToast(`Name changed to "${name}"!`);
+  }
+
+  const THEME_COLORS = [
+    { label: 'Red', accent: '#e94560', accent2: '#f5a623' },
+    { label: 'Purple', accent: '#9b59b6', accent2: '#f5a623' },
+    { label: 'Blue', accent: '#3498db', accent2: '#f5a623' },
+    { label: 'Green', accent: '#27ae60', accent2: '#f5a623' },
+    { label: 'Pink', accent: '#ff2d95', accent2: '#ffcc00' },
+    { label: 'Orange', accent: '#ff6b35', accent2: '#f5a623' },
+  ];
+
+  function buildThemeSwatches() {
+    const container = document.getElementById('theme-swatches');
+    if (!container) return;
+    container.innerHTML = '';
+    THEME_COLORS.forEach(({ label, accent, accent2 }) => {
+      const el = document.createElement('div');
+      el.title = label;
+      el.style.cssText = `width:28px;height:28px;border-radius:50%;background:${accent};cursor:pointer;border:3px solid transparent;transition:transform 0.15s,border-color 0.15s;flex-shrink:0;`;
+      const isActive = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() === accent;
+      if (isActive) el.style.borderColor = '#fff';
+      el.onclick = () => {
+        document.documentElement.style.setProperty('--accent', accent);
+        document.documentElement.style.setProperty('--accent2', accent2);
+        container.querySelectorAll('div').forEach(s => s.style.borderColor = 'transparent');
+        el.style.borderColor = '#fff';
+        el.style.transform = 'scale(1.2)';
+        setTimeout(() => el.style.transform = '', 150);
+      };
+      el.onmouseenter = () => { el.style.transform = 'scale(1.15)'; };
+      el.onmouseleave = () => { el.style.transform = ''; };
+      container.appendChild(el);
+    });
+  }
 
   function copyRoomCode() {
     navigator.clipboard.writeText(roomId).then(() => showToast('Room code copied! 📋'));
@@ -1204,8 +1420,9 @@
   }
 
   // ── CANVAS ──
-  const CANVAS_W = 800, CANVAS_H = 600;
-  let ctx;
+  const CANVAS_W = 1000, CANVAS_H = 750;
+  let ctx, previewCtx;
+  let shapeStartX = 0, shapeStartY = 0, shapeEndX = 0, shapeEndY = 0;
 
   function setupCanvas() {
     const canvas = document.getElementById('main-canvas');
@@ -1216,14 +1433,30 @@
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    const previewCanvas = document.getElementById('preview-canvas');
+    previewCtx = previewCanvas.getContext('2d');
+    previewCanvas.width = CANVAS_W;
+    previewCanvas.height = CANVAS_H;
 
     canvas.addEventListener('mousedown', startDraw);
     canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', endDraw);
-    canvas.addEventListener('mouseleave', endDraw);
+    canvas.addEventListener('mouseup', (e) => endDraw(e));
+    // Don't end draw on mouseleave — allow drawing to continue when cursor re-enters
+    canvas.addEventListener('mouseenter', (e) => {
+      if (drawing && e.buttons === 1) {
+        const pos = getCanvasPos(e);
+        lastX = pos.x; lastY = pos.y;
+        shapeStartX = pos.x; // update shape start to avoid jumps on rect/circle
+        shapeStartY = pos.y;
+      } else if (drawing && e.buttons === 0) {
+        endDraw(); // mouse was released outside the canvas
+      }
+    });
+    // Also catch mouse release outside canvas via document
+    document.addEventListener('mouseup', (e) => { if (drawing) endDraw(e); });
     canvas.addEventListener('touchstart', e => { e.preventDefault(); startDraw(toMouse(e)); }, { passive: false });
     canvas.addEventListener('touchmove', e => { e.preventDefault(); draw(toMouse(e)); }, { passive: false });
-    canvas.addEventListener('touchend', endDraw);
+    canvas.addEventListener('touchend', (e) => endDraw(e));
 
     document.getElementById('brush-size').addEventListener('input', e => { brushSize = +e.target.value; });
   }
@@ -1255,6 +1488,7 @@
 
     // Fill tool: single click, no drag
     if (currentTool === 'fill') {
+      addRecentColor(currentColor);
       const data = { type: 'fill', x: pos.x, y: pos.y, color: currentColor };
       floodFill(ctx, Math.round(pos.x), Math.round(pos.y), currentColor);
       // fill is its own complete stroke
@@ -1267,6 +1501,11 @@
     }
 
     drawing = true;
+    if (currentTool === 'rect' || currentTool === 'circle') {
+      shapeStartX = pos.x; shapeStartY = pos.y;
+      return; // preview drawn on mousemove
+    }
+    if (currentTool === 'pen') addRecentColor(currentColor);
     lastX = pos.x; lastY = pos.y;
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, (currentTool === 'eraser' ? brushSize * 2 : brushSize) / 2, 0, Math.PI * 2);
@@ -1278,7 +1517,12 @@
 
   function draw(e) {
     if (!drawing || !isMyTurn || currentTool === 'fill') return;
+    if (e.buttons === 0) { endDraw(); return; } // mouse released outside canvas
     const pos = getCanvasPos(e);
+    if (currentTool === 'rect' || currentTool === 'circle') {
+      drawShapePreview(shapeStartX, shapeStartY, pos.x, pos.y);
+      return;
+    }
     const color = currentTool === 'eraser' ? '#ffffff' : currentColor;
     const size = currentTool === 'eraser' ? brushSize * 2 : brushSize;
     drawLine(ctx, lastX, lastY, pos.x, pos.y, color, size);
@@ -1287,9 +1531,47 @@
     lastX = pos.x; lastY = pos.y;
   }
 
-  function endDraw() {
+  function drawShapePreview(x1, y1, x2, y2) {
+    shapeEndX = x2; shapeEndY = y2;
+    previewCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    previewCtx.strokeStyle = currentColor;
+    previewCtx.lineWidth = brushSize;
+    previewCtx.lineCap = 'round';
+    previewCtx.lineJoin = 'round';
+    if (currentTool === 'rect') {
+      previewCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    } else if (currentTool === 'circle') {
+      const rx = Math.abs(x2 - x1) / 2;
+      const ry = Math.abs(y2 - y1) / 2;
+      const cx = (x1 + x2) / 2;
+      const cy = (y1 + y2) / 2;
+      if (rx > 0 && ry > 0) {
+        previewCtx.beginPath();
+        previewCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        previewCtx.stroke();
+      }
+    }
+  }
+
+  function endDraw(e) {
     if (!drawing) return;
     drawing = false;
+    // Commit shape tools on mouse release
+    if (currentTool === 'rect' || currentTool === 'circle') {
+      let x2 = shapeEndX, y2 = shapeEndY;
+      try { if (e && e.clientX !== undefined) { const p = getCanvasPos(e); x2 = p.x; y2 = p.y; } } catch(_) {}
+      if (previewCtx) previewCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+      const data = { type: currentTool, x1: shapeStartX, y1: shapeStartY, x2, y2, color: currentColor, size: brushSize };
+      applyDraw(data);
+      addRecentColor(currentColor);
+      currentClientStroke = [data];
+      socket.emit('draw', data);
+      clientStrokes.push(currentClientStroke);
+      currentClientStroke = [];
+      socket.emit('strokeEnd');
+      return;
+    }
+    if (previewCtx) previewCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     if (currentClientStroke.length > 0) {
       clientStrokes.push(currentClientStroke);
       currentClientStroke = [];
@@ -1329,6 +1611,26 @@
       drawLine(ctx, data.x1, data.y1, data.x2, data.y2, data.color, data.size);
     } else if (data.type === 'fill') {
       floodFill(ctx, Math.round(data.x), Math.round(data.y), data.color);
+    } else if (data.type === 'rect') {
+      ctx.beginPath();
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = data.size;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeRect(data.x1, data.y1, data.x2 - data.x1, data.y2 - data.y1);
+    } else if (data.type === 'circle') {
+      const rx = Math.abs(data.x2 - data.x1) / 2;
+      const ry = Math.abs(data.y2 - data.y1) / 2;
+      const cx = (data.x1 + data.x2) / 2;
+      const cy = (data.y1 + data.y2) / 2;
+      if (rx > 0 && ry > 0) {
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = data.color;
+        ctx.lineWidth = data.size;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
     }
   }
 
@@ -1351,9 +1653,10 @@
 
   function setTool(tool) {
     currentTool = tool;
-    document.getElementById('tool-pen').classList.toggle('active', tool === 'pen');
-    document.getElementById('tool-eraser').classList.toggle('active', tool === 'eraser');
-    document.getElementById('tool-fill').classList.toggle('active', tool === 'fill');
+    ['pen','eraser','fill','rect','circle'].forEach(t => {
+      const el = document.getElementById('tool-' + t);
+      if (el) el.classList.toggle('active', t === tool);
+    });
   }
 
   // ── FLOOD FILL ──
@@ -1373,7 +1676,7 @@
     // Already the fill color
     if (tR === fillR && tG === fillG && tB === fillB) return;
 
-    const TOL = 32;
+    const TOL = 48;
     function matches(i) {
       return Math.abs(d[i]-tR) + Math.abs(d[i+1]-tG) + Math.abs(d[i+2]-tB) <= TOL;
     }
@@ -1423,15 +1726,20 @@
   // ── WORD DISPLAY ──
   function updateWordDisplay(word, isDrawer) {
     const el = document.getElementById('word-display');
+    const countsEl = document.getElementById('word-letter-counts');
     if (isDrawer) {
       el.textContent = word;
       el.classList.add('revealed');
+      countsEl.textContent = '';
     } else {
       // Split by spaces to preserve word boundaries as visible gaps
       const wordParts = word.split(' ');
       const formattedParts = wordParts.map(part => part.split('').join(' '));
       el.innerHTML = formattedParts.join('<span class="word-gap"></span>');
       el.classList.remove('revealed');
+      // Show letter count of each word (split on spaces and + for combination mode)
+      const letterCounts = word.replace(/\+/g, ' ').split(' ').filter(p => p.length > 0).map(p => p.length);
+      countsEl.textContent = letterCounts.join('   ');
     }
   }
 
@@ -1454,7 +1762,37 @@
   socket.on('connect', () => { myId = socket.id; });
 
   socket.on('roomCreated', ({ roomId: id, state }) => { enterLobby(id, state); });
-  socket.on('roomJoined', ({ roomId: id, state }) => { enterLobby(id, state); });
+  socket.on('roomJoined', ({ roomId: id, state }) => {
+    if (state.state === 'lobby') {
+      enterLobby(id, state);
+    } else {
+      // Joining mid-game
+      roomId = id;
+      document.getElementById('room-badge').textContent = id;
+      document.getElementById('room-badge').style.display = 'block';
+      gameState = state;
+      hasGuessedCorrect = false;
+      hasGuessedPlayers = new Set();
+      myLockedPart = null;
+      showScreen('screen-game');
+      updateScoreboard(state);
+      setDrawerMode(false);
+      if (state.state === 'drawing') {
+        if (state.hiddenMode) {
+          const el = document.getElementById('word-display');
+          el.textContent = '???';
+          el.classList.remove('revealed');
+        } else if (state.wordSpaces) {
+          updateWordDisplay(state.wordSpaces, false);
+        }
+        updateTimer(state.timeLeft);
+        showCanvasOverlay(false);
+      } else {
+        showCanvasOverlay(true, '⏳ In Progress...', 'Waiting for next round...');
+      }
+      addChat({ system: true, text: `You joined mid-game! Good luck!` });
+    }
+  });
 
   socket.on('playerJoined', ({ player, state }) => {
     updateLobby(state);
@@ -1566,6 +1904,7 @@
 
   socket.on('hint', ({ hint }) => {
     if (gameState?.options?.hidden) return;
+    if (isMyTurn) return; // don't overwrite the artist's word display
     updateWordDisplay(hint, false);
     addChat({ system: true, text: `💡 Hint: ${hint.split('').join(' ')}` });
   });
