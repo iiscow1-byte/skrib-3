@@ -1,1 +1,12 @@
 when someone doesn't pick a term before the timer goes off the term pick ui should dissapear
+when a word is locked in in combinations, it should be unhidden at the top of the screen
+fix how the hints slider gets set back to 2 when you try to set it to 0
+remove join in progress screen
+show which list each term came from setting
+add more options to theme changer
+Autocorrect should be a number not easy/hard
+add a separator between custom and normal colors
+add a triangle tool
+hard edges on draw tool for fill
+name box should scale to fit name length
+Players don't fully leave the game when pressing the top left button

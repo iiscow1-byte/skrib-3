@@ -911,6 +911,7 @@
     <div class="word-display-wrap">
       <div id="word-display">_ _ _ _ _</div>
       <div id="word-letter-counts"></div>
+      <div id="word-source-label" style="font-size:0.7rem;color:var(--text-dim);font-weight:700;letter-spacing:1px;text-transform:uppercase;min-height:1em;"></div>
     </div>
     <div class="timer-box" id="timer">80</div>
   </div>
@@ -950,15 +951,17 @@
       <!-- Tools (shown only to drawer) -->
       <div class="tools-bar" id="tools-bar" style="display:none">
         <button class="tool-btn active" id="tool-pen" onclick="setTool('pen')" title="Pen">✏️</button>
-        <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')" title="Eraser">🧹</button>
+        <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')" title="Eraser">🧼</button>
         <button class="tool-btn" id="tool-fill" onclick="setTool('fill')" title="Fill">🪣</button>
         <button class="tool-btn" id="tool-rect" onclick="setTool('rect')" title="Rectangle">▭</button>
         <button class="tool-btn" id="tool-circle" onclick="setTool('circle')" title="Circle">◯</button>
+        <button class="tool-btn" id="tool-triangle" onclick="setTool('triangle')" title="Triangle">△</button>
         <div class="sep"></div>
         <input type="range" class="size-slider" id="brush-size" min="2" max="40" value="6" />
         <div class="sep"></div>
         <div style="display:flex;flex-direction:column;gap:4px;">
           <div class="colors-row" id="color-swatches-default"></div>
+          <div style="width:100%;height:1px;background:var(--border);margin:1px 0;"></div>
           <div class="colors-row" id="color-swatches">
             <div class="color-swatch color-wheel-swatch" title="Pick custom color" onclick="openColorPicker()"></div>
             <input type="color" id="color-picker-input" value="#000000" style="opacity:0;position:absolute;width:0;height:0;pointer-events:none" />
@@ -1040,14 +1043,19 @@
 
   const COLORS = [
     '#000000','#ffffff','#ff3b30','#ff9500','#ffcc00','#34c759',
-    '#5ac8fa','#007aff','#5856d6','#ff2d55','#a2845e','#636366',
+    '#5ac8fa','#007aff','#5856d6','#ff2d55','#a0522d','#636366',
     '#c7c7cc','#8e8e93','#1c1c1e','#d1d1d6',
   ];
 
-  const AVATARS = ['🐱','🐶','🦊','🐻','🐼','🐨','🦁','🐯','🐸','🐙','🦋','🐢'];
+  const AVATARS = ['🐱','🐶','🦊','🐻','🐼','🐨','🦁','🐯','🐸','🐙','ᶠᶸᶜᵏMe𓀐𓂸','🧱'];
   const AVATAR_COLORS = ['#ff6b6b','#ffd166','#06d6a0','#118ab2','#073b4c','#8338ec','#ff006e','#fb5607','#3a86ff','#06d6a0'];
 
   // ── INIT ──
+  function autoSizeName(input) {
+    const len = input.value.length;
+    input.style.fontSize = len > 16 ? '0.7rem' : len > 12 ? '0.82rem' : len > 8 ? '0.92rem' : '1rem';
+  }
+
   window.onload = () => {
     buildColorSwatches();
     setupCanvas();
@@ -1056,6 +1064,10 @@
         e.preventDefault();
         if (isMyTurn) undoStroke();
       }
+    });
+    ['player-name', 'lobby-name-input'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => autoSizeName(el));
     });
   };
 
@@ -1150,7 +1162,9 @@
   }
 
   function goHome() {
-    // Only navigate home if not in an active game
+    if (roomId) {
+      socket.emit('leaveRoom');
+    }
     roomId = null;
     document.getElementById('room-badge').style.display = 'none';
     showScreen('screen-menu');
@@ -1217,7 +1231,7 @@
     if (!valEl) return;
     if (key === 'wordChoices') valEl.textContent = v + ' words';
     else if (key === 'roundTime') valEl.textContent = v + 's';
-    else if (key === 'autocorrectStrength') valEl.textContent = AUTOCORRECT_LABELS[v] || v;
+    else if (key === 'autocorrectStrength') valEl.textContent = v;
     else valEl.textContent = v;
   }
 
@@ -1233,7 +1247,7 @@
     if (hc) { hc.value = String(opts.hintCount ?? 2); document.getElementById('opt-hint-count-val').textContent = opts.hintCount ?? 2; }
     if (comb) comb.checked = !!opts.combinations;
     if (hid) hid.checked = !!opts.hidden;
-    if (ac) { ac.value = String(opts.autocorrectStrength ?? 1); document.getElementById('opt-autocorrect-val').textContent = AUTOCORRECT_LABELS[opts.autocorrectStrength ?? 1] || (opts.autocorrectStrength ?? 1); }
+    if (ac) { ac.value = String(opts.autocorrectStrength ?? 1); document.getElementById('opt-autocorrect-val').textContent = opts.autocorrectStrength ?? 1; }
   }
 
   function sendGameOption(key, value) {
@@ -1337,6 +1351,12 @@
     { label: 'Green', accent: '#27ae60', accent2: '#f5a623' },
     { label: 'Pink', accent: '#ff2d95', accent2: '#ffcc00' },
     { label: 'Orange', accent: '#ff6b35', accent2: '#f5a623' },
+    { label: 'Teal', accent: '#00b4d8', accent2: '#90e0ef' },
+    { label: 'Yellow', accent: '#e6b800', accent2: '#e74c3c' },
+    { label: 'Crimson', accent: '#c0392b', accent2: '#e67e22' },
+    { label: 'Indigo', accent: '#6c63ff', accent2: '#f5a623' },
+    { label: 'Mint', accent: '#00c9a7', accent2: '#f5a623' },
+    { label: 'Rose', accent: '#e91e8c', accent2: '#ff9800' },
   ];
 
   function buildThemeSwatches() {
@@ -1501,16 +1521,22 @@
     }
 
     drawing = true;
-    if (currentTool === 'rect' || currentTool === 'circle') {
+    if (currentTool === 'rect' || currentTool === 'circle' || currentTool === 'triangle') {
       shapeStartX = pos.x; shapeStartY = pos.y;
       return; // preview drawn on mousemove
     }
     if (currentTool === 'pen') addRecentColor(currentColor);
     lastX = pos.x; lastY = pos.y;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, (currentTool === 'eraser' ? brushSize * 2 : brushSize) / 2, 0, Math.PI * 2);
-    ctx.fillStyle = currentTool === 'eraser' ? '#ffffff' : currentColor;
-    ctx.fill();
+    if (currentTool === 'pen') {
+      const r = brushSize / 2;
+      ctx.fillStyle = currentColor;
+      ctx.fillRect(pos.x - r, pos.y - r, r * 2, r * 2);
+    } else {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (currentTool === 'eraser' ? brushSize * 2 : brushSize) / 2, 0, Math.PI * 2);
+      ctx.fillStyle = currentTool === 'eraser' ? '#ffffff' : currentColor;
+      ctx.fill();
+    }
     const data = { type: 'dot', x: pos.x, y: pos.y, color: currentTool === 'eraser' ? '#ffffff' : currentColor, size: brushSize, tool: currentTool };
     emitDraw(data);
   }
@@ -1519,13 +1545,14 @@
     if (!drawing || !isMyTurn || currentTool === 'fill') return;
     if (e.buttons === 0) { endDraw(); return; } // mouse released outside canvas
     const pos = getCanvasPos(e);
-    if (currentTool === 'rect' || currentTool === 'circle') {
+    if (currentTool === 'rect' || currentTool === 'circle' || currentTool === 'triangle') {
       drawShapePreview(shapeStartX, shapeStartY, pos.x, pos.y);
       return;
     }
     const color = currentTool === 'eraser' ? '#ffffff' : currentColor;
     const size = currentTool === 'eraser' ? brushSize * 2 : brushSize;
-    drawLine(ctx, lastX, lastY, pos.x, pos.y, color, size);
+    const lc = currentTool === 'pen' ? 'square' : 'round';
+    drawLine(ctx, lastX, lastY, pos.x, pos.y, color, size, lc);
     const data = { type: 'line', x1: lastX, y1: lastY, x2: pos.x, y2: pos.y, color, size, tool: currentTool };
     emitDraw(data);
     lastX = pos.x; lastY = pos.y;
@@ -1540,6 +1567,14 @@
     previewCtx.lineJoin = 'round';
     if (currentTool === 'rect') {
       previewCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    } else if (currentTool === 'triangle') {
+      const cx = (x1 + x2) / 2;
+      previewCtx.beginPath();
+      previewCtx.moveTo(cx, y1);
+      previewCtx.lineTo(x1, y2);
+      previewCtx.lineTo(x2, y2);
+      previewCtx.closePath();
+      previewCtx.stroke();
     } else if (currentTool === 'circle') {
       const rx = Math.abs(x2 - x1) / 2;
       const ry = Math.abs(y2 - y1) / 2;
@@ -1557,7 +1592,7 @@
     if (!drawing) return;
     drawing = false;
     // Commit shape tools on mouse release
-    if (currentTool === 'rect' || currentTool === 'circle') {
+    if (currentTool === 'rect' || currentTool === 'circle' || currentTool === 'triangle') {
       let x2 = shapeEndX, y2 = shapeEndY;
       try { if (e && e.clientX !== undefined) { const p = getCanvasPos(e); x2 = p.x; y2 = p.y; } } catch(_) {}
       if (previewCtx) previewCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
@@ -1590,25 +1625,31 @@
     socket.emit('undo');
   }
 
-  function drawLine(c, x1, y1, x2, y2, color, size) {
+  function drawLine(c, x1, y1, x2, y2, color, size, lineCap = 'round') {
     c.beginPath();
     c.moveTo(x1, y1);
     c.lineTo(x2, y2);
     c.strokeStyle = color;
     c.lineWidth = size;
-    c.lineCap = 'round';
-    c.lineJoin = 'round';
+    c.lineCap = lineCap;
+    c.lineJoin = lineCap === 'square' ? 'miter' : 'round';
     c.stroke();
   }
 
   function applyDraw(data) {
     if (data.type === 'dot') {
-      ctx.beginPath();
-      ctx.arc(data.x, data.y, data.size / 2, 0, Math.PI * 2);
-      ctx.fillStyle = data.color;
-      ctx.fill();
+      if (data.tool === 'pen') {
+        const r = data.size / 2;
+        ctx.fillStyle = data.color;
+        ctx.fillRect(data.x - r, data.y - r, r * 2, r * 2);
+      } else {
+        ctx.beginPath();
+        ctx.arc(data.x, data.y, data.size / 2, 0, Math.PI * 2);
+        ctx.fillStyle = data.color;
+        ctx.fill();
+      }
     } else if (data.type === 'line') {
-      drawLine(ctx, data.x1, data.y1, data.x2, data.y2, data.color, data.size);
+      drawLine(ctx, data.x1, data.y1, data.x2, data.y2, data.color, data.size, data.tool === 'pen' ? 'square' : 'round');
     } else if (data.type === 'fill') {
       floodFill(ctx, Math.round(data.x), Math.round(data.y), data.color);
     } else if (data.type === 'rect') {
@@ -1631,6 +1672,18 @@
         ctx.lineCap = 'round';
         ctx.stroke();
       }
+    } else if (data.type === 'triangle') {
+      const cx = (data.x1 + data.x2) / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, data.y1);
+      ctx.lineTo(data.x1, data.y2);
+      ctx.lineTo(data.x2, data.y2);
+      ctx.closePath();
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = data.size;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
     }
   }
 
@@ -1653,7 +1706,7 @@
 
   function setTool(tool) {
     currentTool = tool;
-    ['pen','eraser','fill','rect','circle'].forEach(t => {
+    ['pen','eraser','fill','rect','circle','triangle'].forEach(t => {
       const el = document.getElementById('tool-' + t);
       if (el) el.classList.toggle('active', t === tool);
     });
@@ -1777,6 +1830,7 @@
       showScreen('screen-game');
       updateScoreboard(state);
       setDrawerMode(false);
+      showCanvasOverlay(false);
       if (state.state === 'drawing') {
         if (state.hiddenMode) {
           const el = document.getElementById('word-display');
@@ -1786,9 +1840,6 @@
           updateWordDisplay(state.wordSpaces, false);
         }
         updateTimer(state.timeLeft);
-        showCanvasOverlay(false);
-      } else {
-        showCanvasOverlay(true, '⏳ In Progress...', 'Waiting for next round...');
       }
       addChat({ system: true, text: `You joined mid-game! Good luck!` });
     }
@@ -1832,6 +1883,8 @@
     lastRoundImageUrl = null;
     document.getElementById('download-drawing-btn').style.display = 'none';
     document.getElementById('chat-input').placeholder = 'Type your guess...';
+    const srcEl = document.getElementById('word-source-label');
+    if (srcEl) srcEl.textContent = '';
 
     // Clear chat
     document.getElementById('chat-messages').innerHTML = '';
@@ -1879,6 +1932,7 @@
     setDrawerMode(amDrawer);
     updateScoreboard(state);
     document.getElementById('choosing-overlay').style.display = 'none';
+    document.getElementById('word-choice-overlay').style.display = 'none';
 
     if (amDrawer) {
       // Word shown via yourWord event
@@ -1898,8 +1952,10 @@
     }
   });
 
-  socket.on('yourWord', ({ word }) => {
+  socket.on('yourWord', ({ word, sourceList }) => {
     updateWordDisplay(word, true);
+    const srcEl = document.getElementById('word-source-label');
+    if (srcEl) srcEl.textContent = sourceList ? `📚 ${sourceList}` : '';
   });
 
   socket.on('hint', ({ hint }) => {
@@ -1961,6 +2017,11 @@
     showToast(`🔒 "${lockedPart}" locked in! Guess the other word!`);
     addChat({ system: true, text: `🔒 You got one! Now guess the other word.` });
     document.getElementById('chat-input').placeholder = `Got "${lockedPart}" — type the other word...`;
+    // Show locked part in the word display
+    const el = document.getElementById('word-display');
+    el.innerHTML = `<span style="color:var(--green)">${lockedPart}</span> <span style="opacity:0.5">+</span> <span>?</span>`;
+    el.classList.add('revealed');
+    document.getElementById('word-letter-counts').textContent = '';
   });
 
   socket.on('roundEnd', ({ word, scores }) => {

@@ -27,7 +27,7 @@ function loadWordLists() {
 loadWordLists();
 
 const ROUNDS_PER_GAME = 3;
-const MAX_PLAYERS = 8;
+const MAX_PLAYERS = 10;
 
 const rooms = {};
 
@@ -37,11 +37,8 @@ function generateRoomId() {
 
 // Weighted random list selection: each list has a weight (1-5).
 // Within a list, words used fewer times in this game are preferred.
-function getRandomWords(room, count) {
-  return getRandomSingleWords(room, count, new Set());
-}
 
-function getRandomSingleWords(room, count, exclude = new Set()) {
+function getRandomSingleWordsWithSource(room, count, exclude = new Set()) {
   const allLists = { ...wordLists, ...(room.customLists || {}) };
   const selected = (room.selectedLists && room.selectedLists.length > 0)
     ? room.selectedLists.filter(l => allLists[l] && allLists[l].length > 0)
@@ -89,11 +86,15 @@ function getRandomSingleWords(room, count, exclude = new Set()) {
     const word = pickWordFromList(listName);
     if (!used.has(word)) {
       used.add(word);
-      result.push(word);
+      result.push({ word, listName });
     }
   }
 
   return result;
+}
+
+function getRandomSingleWords(room, count, exclude = new Set()) {
+  return getRandomSingleWordsWithSource(room, count, exclude).map(w => w.word);
 }
 
 function maskWord(word) {
@@ -143,6 +144,8 @@ function createRoom(hostId, hostName) {
     lockedParts: {},     // socketId -> locked combination part string
     combinationPart1: null, // first word chosen in 2-step combination pick
     wordChoicesPart2: [], // valid words for second combination pick
+    wordChoicesSources: {}, // word -> listName it came from
+    currentWordSource: null, // listName of the currently drawn word
     options: {
       wordChoices: 3,
       roundTime: 80,
@@ -232,6 +235,8 @@ function startRound(roomId) {
   room.lockedParts = {};
   room.combinationPart1 = null;
   room.wordChoicesPart2 = [];
+  room.wordChoicesSources = {};
+  room.currentWordSource = null;
 
   if (room.currentDrawerIndex >= room.players.length) {
     room.currentDrawerIndex = 0;
@@ -246,7 +251,10 @@ function startRound(roomId) {
   const drawer = room.players[room.currentDrawerIndex];
   if (!drawer) { endGame(roomId); return; }
 
-  room.wordChoices = getRandomWords(room, room.options.wordChoices);
+  const wordChoicesWithSource = getRandomSingleWordsWithSource(room, room.options.wordChoices);
+  room.wordChoices = wordChoicesWithSource.map(w => w.word);
+  room.wordChoicesSources = {};
+  wordChoicesWithSource.forEach(({ word, listName }) => { room.wordChoicesSources[word] = listName; });
   room.state = 'choosing';
   room.timeLeft = 20;
 
@@ -292,6 +300,9 @@ function wordChosen(roomId, word) {
 
   room.currentWord = word;
   room.wordUsedCount[word] = (room.wordUsedCount[word] || 0) + 1;
+  // Track which list this word came from (for combos, use the first part's source)
+  const sourcePart = word.includes('+') ? word.split('+')[0] : word;
+  room.currentWordSource = room.wordChoicesSources[sourcePart] || null;
   room.state = 'drawing';
   room.lockedParts = {};
   room.combinationPart1 = null;
@@ -312,7 +323,7 @@ function wordChosen(roomId, word) {
     drawerName: drawer.name,
   });
 
-  io.to(drawer.id).emit('yourWord', { word });
+  io.to(drawer.id).emit('yourWord', { word, sourceList: room.currentWordSource });
 
   const roundTime = room.options.roundTime;
   const hintCount = room.options.hintCount;
@@ -479,7 +490,7 @@ io.on('connection', (socket) => {
     if (!room || room.host !== socket.id || room.state !== 'lobby') return;
     if (options.wordChoices !== undefined) room.options.wordChoices = Math.max(2, Math.min(6, parseInt(options.wordChoices) || 3));
     if (options.roundTime !== undefined) room.options.roundTime = Math.max(15, Math.min(180, parseInt(options.roundTime) || 80));
-    if (options.hintCount !== undefined) room.options.hintCount = Math.max(0, Math.min(5, parseInt(options.hintCount) || 2));
+    if (options.hintCount !== undefined) { const h = parseInt(options.hintCount); room.options.hintCount = Math.max(0, Math.min(5, isNaN(h) ? 2 : h)); }
     if (options.combinations !== undefined) room.options.combinations = !!options.combinations;
     if (options.hidden !== undefined) room.options.hidden = !!options.hidden;
     if (options.autocorrectStrength !== undefined) room.options.autocorrectStrength = Math.max(0, Math.min(2, parseInt(options.autocorrectStrength) || 0));
@@ -499,7 +510,9 @@ io.on('connection', (socket) => {
         // Part 1 selection
         if (!room.wordChoices.includes(word)) return;
         room.combinationPart1 = word;
-        room.wordChoicesPart2 = getRandomSingleWords(room, room.options.wordChoices, new Set([word]));
+        const p2WithSource = getRandomSingleWordsWithSource(room, room.options.wordChoices, new Set([word]));
+        room.wordChoicesPart2 = p2WithSource.map(w => w.word);
+        p2WithSource.forEach(({ word: w, listName }) => { room.wordChoicesSources[w] = listName; });
         io.to(drawer.id).emit('wordChoices', { words: room.wordChoicesPart2, part: 2, firstWord: word });
       } else {
         // Part 2 selection
@@ -690,6 +703,30 @@ io.on('connection', (socket) => {
     if (rooms[currentRoom]) {
       io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
     }
+  });
+
+  socket.on('leaveRoom', () => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (room) {
+      const player = room.players.find(p => p.id === socket.id);
+      const name = player?.name || 'A player';
+      removePlayer(currentRoom, socket.id);
+      const activeRoom = rooms[currentRoom];
+      if (activeRoom) {
+        io.to(currentRoom).emit('playerLeft', { playerName: name, state: getRoomPublicState(activeRoom) });
+        if (room.state === 'drawing' || room.state === 'choosing') {
+          if (room.players.length < 2) {
+            clearRoomTimer(room);
+            room.state = 'lobby';
+            io.to(currentRoom).emit('backToLobby', getRoomPublicState(room));
+          }
+        }
+      }
+      socket.leave(currentRoom);
+    }
+    currentRoom = null;
+    playerName = null;
   });
 
   socket.on('disconnect', () => {
