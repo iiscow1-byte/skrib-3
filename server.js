@@ -153,6 +153,8 @@ function createRoom(hostId, hostName) {
       combinations: false,
       hidden: false,
       autocorrectStrength: 1, // max levenshtein distance (0=off, 1=1 letter, 2=2 letters)
+      showWordSource: false,   // show which list the word came from after each round
+      lockComboParts: true,    // lock in guessed parts in combination mode; if false, show "is close" instead
     },
   };
   return roomId;
@@ -341,7 +343,8 @@ function wordChosen(roomId, word) {
   }
 
   room.timer = setInterval(() => {
-    room.timeLeft--;
+    const guessedCount = room.guessedPlayers ? room.guessedPlayers.size : 0;
+    room.timeLeft = Math.max(0, room.timeLeft - (1 + guessedCount));
 
     if (!skipHints) {
       for (let i = 0; i < hintTimes.length; i++) {
@@ -371,6 +374,7 @@ function endDrawingRound(roomId) {
 
   io.to(roomId).emit('roundEnd', {
     word: room.currentWord,
+    wordSource: room.options.showWordSource ? room.currentWordSource : null,
     scores: room.players.map(p => ({ id: p.id, name: p.name, score: room.scores[p.id] || 0 })),
   });
 
@@ -494,6 +498,8 @@ io.on('connection', (socket) => {
     if (options.combinations !== undefined) room.options.combinations = !!options.combinations;
     if (options.hidden !== undefined) room.options.hidden = !!options.hidden;
     if (options.autocorrectStrength !== undefined) room.options.autocorrectStrength = Math.max(0, Math.min(2, parseInt(options.autocorrectStrength) || 0));
+    if (options.showWordSource !== undefined) room.options.showWordSource = !!options.showWordSource;
+    if (options.lockComboParts !== undefined) room.options.lockComboParts = !!options.lockComboParts;
     io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
   });
 
@@ -599,11 +605,23 @@ io.on('connection', (socket) => {
         const remaining = aParts.find(p => p !== lockedPart);
         isCorrect = remaining !== undefined && guess === remaining;
       } else {
-        // Check if guess matches exactly one part (lock it in)
+        // Check if guess matches exactly one part (lock it in, or show close if locking disabled)
         const matchedPart = aParts.find(p => guess === p);
         if (matchedPart) {
-          room.lockedParts[socket.id] = matchedPart;
-          socket.emit('partLocked', { lockedPart: matchedPart });
+          if (room.options.lockComboParts !== false) {
+            room.lockedParts[socket.id] = matchedPart;
+            socket.emit('partLocked', { lockedPart: matchedPart });
+          } else {
+            // Lock disabled — notify guesser they're close without revealing the part
+            socket.emit('closeGuess', { playerName: player.name });
+            io.to(currentRoom).emit('chat', {
+              playerId: socket.id,
+              playerName: player.name,
+              text,
+              isClose: true,
+              isGuess: true,
+            });
+          }
           return; // Not fully correct yet
         }
         // Check if both parts are guessed
@@ -635,6 +653,7 @@ io.on('connection', (socket) => {
         playerName: player.name,
         points,
         autocorrected: wasAutocorrected,
+        correctedWord: wasAutocorrected ? room.currentWord : null,
         scores: room.players.map(p => ({ id: p.id, name: p.name, score: room.scores[p.id] || 0 })),
       });
 
@@ -652,6 +671,10 @@ io.on('connection', (socket) => {
         isClose,
         isGuess: true,
       });
+      // Private toast to guesser when autocorrect is off or easy (strength < 2)
+      if (isClose && room.options.autocorrectStrength < 2) {
+        socket.emit('closeGuess', { playerName: player.name });
+      }
     }
   });
 

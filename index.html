@@ -240,7 +240,7 @@
       font-family: 'Baloo 2', cursive;
       font-size: 1.8rem;
       font-weight: 800;
-      letter-spacing: 6px;
+      letter-spacing: 2px;
       color: var(--text);
       text-align: center;
     }
@@ -758,6 +758,122 @@
     }
     #toast.show { transform: translateX(-50%) translateY(0); }
 
+    /* Settings overlay */
+    #settings-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 400;
+      align-items: center;
+      justify-content: center;
+    }
+    .settings-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 36px;
+      max-width: 440px;
+      width: 90%;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+    .settings-card h3 {
+      font-family: 'Baloo 2', cursive;
+      font-size: 1.4rem;
+      color: var(--accent2);
+      margin-bottom: 0;
+    }
+    .settings-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .settings-row label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .settings-row-inner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .settings-row input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+      accent-color: var(--accent2);
+    }
+    .settings-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: var(--accent2);
+      cursor: grab;
+    }
+    .settings-row input[type="color"] {
+      width: 48px; height: 38px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      background: none;
+      padding: 2px;
+    }
+    .settings-val {
+      font-weight: 900;
+      color: var(--accent2);
+      font-size: 0.9rem;
+      min-width: 40px;
+      text-align: right;
+    }
+    .btn-settings {
+      background: none;
+      border: 2px solid var(--border);
+      color: var(--text-dim);
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s, color 0.2s;
+      flex-shrink: 0;
+    }
+    .btn-settings:hover { border-color: var(--accent2); color: var(--text); }
+
+    /* Lobby chat */
+    #lobby-chat-panel {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      max-height: 320px;
+    }
+    #lobby-chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      scroll-behavior: smooth;
+      min-height: 120px;
+      max-height: 220px;
+    }
+    #lobby-chat-messages::-webkit-scrollbar { width: 4px; }
+    #lobby-chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
     /* Visible gap between words in the word display */
     .word-gap { display: inline-block; width: 1em; min-width: 1em; }
 
@@ -770,8 +886,8 @@
       gap: 2px;
     }
     #word-letter-counts {
-      font-size: 0.75rem;
-      font-weight: 700;
+      font-size: 1rem;
+      font-weight: 800;
       color: var(--text-dim);
       letter-spacing: 4px;
       min-height: 1em;
@@ -783,8 +899,43 @@
 <header>
   <button class="logo" onclick="goHome()">Mivimoose<span>🎨</span></button>
   <div id="room-badge"></div>
-  <a href="https://donate.wikimedia.org" target="_blank" rel="noopener" class="btn-support">Support me</a>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <button class="btn-settings" onclick="openSettings()" title="Settings">⚙️</button>
+    <a href="https://donate.wikimedia.org" target="_blank" rel="noopener" class="btn-support">Support me</a>
+  </div>
 </header>
+
+<!-- Settings Overlay -->
+<div id="settings-overlay">
+  <div class="settings-card">
+    <h3>⚙️ Settings</h3>
+    <div class="settings-row">
+      <label>UI Size</label>
+      <div class="settings-row-inner">
+        <input type="range" id="settings-scale" min="75" max="130" step="5" value="100"
+          oninput="applyUIScale(this.value)" />
+        <span class="settings-val" id="settings-scale-val">100%</span>
+      </div>
+    </div>
+    <div class="settings-row">
+      <label>Accent Color</label>
+      <div class="settings-row-inner">
+        <input type="color" id="settings-accent-color" value="#e94560"
+          oninput="applyAccentColor(this.value)" />
+        <span style="font-size:0.85rem;color:var(--text-dim);font-weight:600">Main highlight color</span>
+      </div>
+    </div>
+    <div class="settings-row">
+      <label>Secondary Color</label>
+      <div class="settings-row-inner">
+        <input type="color" id="settings-accent2-color" value="#f5a623"
+          oninput="document.documentElement.style.setProperty('--accent2', this.value)" />
+        <span style="font-size:0.85rem;color:var(--text-dim);font-weight:600">Scores &amp; labels color</span>
+      </div>
+    </div>
+    <button class="btn btn-secondary" onclick="closeSettings()" style="align-self:flex-end;padding:10px 22px;">Close</button>
+  </div>
+</div>
 
 <div id="toast"></div>
 
@@ -796,13 +947,13 @@
       <label>Your Name</label>
       <input type="text" id="player-name" placeholder="Enter your name..." maxlength="20" />
     </div>
-    <button class="btn btn-primary" onclick="createRoom()">Create Room</button>
-    <div class="divider">or</div>
     <div class="input-group">
       <label>Room Code</label>
       <input type="text" id="join-code" placeholder="e.g. AB12CD" maxlength="6" style="text-transform:uppercase;letter-spacing:3px" />
     </div>
-    <button class="btn btn-secondary" onclick="joinRoom()">Join Room</button>
+    <button class="btn btn-primary" onclick="joinRoom()">Join Room</button>
+    <div class="divider">or</div>
+    <button class="btn btn-secondary" onclick="createRoom()">Create Room</button>
     <div id="error-msg"></div>
   </div>
 </div>
@@ -834,6 +985,17 @@
       <div id="lobby-players-list"></div>
     </div>
   </div>
+  <!-- Lobby Chat -->
+  <div id="lobby-chat-panel" class="word-lists-panel" style="padding:0;overflow:hidden">
+    <div class="sidebar-title" style="padding:10px 16px;">💬 Lobby Chat</div>
+    <div id="lobby-chat-messages"></div>
+    <div class="chat-input-row">
+      <input type="text" id="lobby-chat-input" placeholder="Say something..." maxlength="60"
+        onkeydown="if(event.key==='Enter') sendLobbyChat()" />
+      <button onclick="sendLobbyChat()">Send</button>
+    </div>
+  </div>
+
   <div id="word-lists-panel" class="word-lists-panel" style="display:none">
     <h3>📚 Word Lists</h3>
     <p class="hint">Check the lists to include. Words are drawn evenly across all selected lists.</p>
@@ -896,6 +1058,20 @@
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
           <input type="checkbox" id="opt-hidden" onchange="sendGameOption('hidden', this.checked)" style="accent-color:var(--accent2);width:16px;height:16px;cursor:pointer" />
           <span style="font-size:0.85rem;color:var(--text-dim)">No hints or letter count</span>
+        </label>
+      </div>
+      <div class="option-item">
+        <label>Show Word Source</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+          <input type="checkbox" id="opt-show-word-source" onchange="sendGameOption('showWordSource', this.checked)" style="accent-color:var(--accent2);width:16px;height:16px;cursor:pointer" />
+          <span style="font-size:0.85rem;color:var(--text-dim)">Show list name after round</span>
+        </label>
+      </div>
+      <div class="option-item">
+        <label>Lock Combo Parts</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+          <input type="checkbox" id="opt-lock-combo-parts" checked onchange="sendGameOption('lockComboParts', this.checked)" style="accent-color:var(--accent2);width:16px;height:16px;cursor:pointer" />
+          <span style="font-size:0.85rem;color:var(--text-dim)">Lock in first word of pair</span>
         </label>
       </div>
     </div>
@@ -1004,7 +1180,7 @@
     <p class="sub">Here are the final standings</p>
     <div class="podium" id="podium"></div>
     <div id="final-scores-list"></div>
-    <p style="color:var(--text-dim);font-size:0.85rem">Returning to lobby in 10 seconds...</p>
+    <p style="color:var(--text-dim);font-size:0.85rem">Returning to lobby in <span id="lobby-countdown">10</span> seconds...</p>
   </div>
 </div>
 
@@ -1047,6 +1223,42 @@
     '#c7c7cc','#8e8e93','#1c1c1e','#d1d1d6',
   ];
 
+  // ── SETTINGS ──
+  function openSettings() {
+    const overlay = document.getElementById('settings-overlay');
+    overlay.style.display = 'flex';
+    // Sync current values
+    const currentScale = parseInt(document.documentElement.style.fontSize || '16') / 16 * 100;
+    const scaleEl = document.getElementById('settings-scale');
+    scaleEl.value = Math.round(currentScale / 5) * 5 || 100;
+    document.getElementById('settings-scale-val').textContent = scaleEl.value + '%';
+    const computedAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const computedAccent2 = getComputedStyle(document.documentElement).getPropertyValue('--accent2').trim();
+    if (computedAccent) document.getElementById('settings-accent-color').value = computedAccent;
+    if (computedAccent2) document.getElementById('settings-accent2-color').value = computedAccent2;
+  }
+
+  function closeSettings() {
+    document.getElementById('settings-overlay').style.display = 'none';
+  }
+
+  function applyUIScale(value) {
+    const px = 16 * parseInt(value) / 100;
+    document.documentElement.style.fontSize = px + 'px';
+    document.getElementById('settings-scale-val').textContent = value + '%';
+    try { localStorage.setItem('mivi_ui_scale', value); } catch(e) {}
+  }
+
+  function applyAccentColor(value) {
+    document.documentElement.style.setProperty('--accent', value);
+    try { localStorage.setItem('mivi_accent', value); } catch(e) {}
+  }
+
+  // Close settings overlay on backdrop click
+  document.getElementById('settings-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeSettings();
+  });
+
   const AVATARS = ['🐱','🐶','🦊','🐻','🐼','🐨','🦁','🐯','🐸','🐙','ᶠᶸᶜᵏMe𓀐𓂸','🧱'];
   const AVATAR_COLORS = ['#ff6b6b','#ffd166','#06d6a0','#118ab2','#073b4c','#8338ec','#ff006e','#fb5607','#3a86ff','#06d6a0'];
 
@@ -1057,6 +1269,16 @@
   }
 
   window.onload = () => {
+    // Restore persisted UI settings
+    try {
+      const savedScale = localStorage.getItem('mivi_ui_scale');
+      if (savedScale) applyUIScale(savedScale);
+      const savedAccent = localStorage.getItem('mivi_accent');
+      if (savedAccent) {
+        document.documentElement.style.setProperty('--accent', savedAccent);
+        document.getElementById('settings-accent-color').value = savedAccent;
+      }
+    } catch(e) {}
     buildColorSwatches();
     setupCanvas();
     document.addEventListener('keydown', e => {
@@ -1074,8 +1296,12 @@
   let recentColors = [];
 
   const DEFAULT_COLORS = [
-    '#000000','#ffffff','#ff3b30','#ff9500','#ffcc00','#34c759',
-    '#5ac8fa','#007aff','#5856d6','#ff2d55','#a2845e','#636366',
+    '#000000','#4c4c4c','#c1c1c1','#ffffff',
+    '#740b07','#ef130b','#c23800','#ff7100',
+    '#ffe400','#e8a200','#005510','#00cc00',
+    '#0e0865','#231fd3','#00569e','#00b2ff',
+    '#550069','#a300ba','#a75574','#d37caa',
+    '#63300d','#a0522d',
   ];
 
   function buildColorSwatches() {
@@ -1248,6 +1474,10 @@
     if (comb) comb.checked = !!opts.combinations;
     if (hid) hid.checked = !!opts.hidden;
     if (ac) { ac.value = String(opts.autocorrectStrength ?? 1); document.getElementById('opt-autocorrect-val').textContent = opts.autocorrectStrength ?? 1; }
+    const sws = document.getElementById('opt-show-word-source');
+    if (sws) sws.checked = !!opts.showWordSource;
+    const lcp = document.getElementById('opt-lock-combo-parts');
+    if (lcp) lcp.checked = opts.lockComboParts !== false;
   }
 
   function sendGameOption(key, value) {
@@ -1385,6 +1615,29 @@
 
   function copyRoomCode() {
     navigator.clipboard.writeText(roomId).then(() => showToast('Room code copied! 📋'));
+  }
+
+  // ── LOBBY CHAT ──
+  function addLobbyChat(msg) {
+    const box = document.getElementById('lobby-chat-messages');
+    if (!box) return;
+    const el = document.createElement('div');
+    el.className = 'chat-msg' + (msg.system ? ' system' : '') + (msg.close ? ' close' : '');
+    if (msg.system) {
+      el.textContent = msg.text;
+    } else {
+      el.innerHTML = `<span class="author" style="color:${getPlayerAvatar(msg.playerId || '').color}">${msg.playerName}:</span>${msg.text}`;
+    }
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function sendLobbyChat() {
+    const input = document.getElementById('lobby-chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    socket.emit('chat', { text });
   }
 
   function startGame() { socket.emit('startGame'); }
@@ -1719,6 +1972,10 @@
     const d = imageData.data;
     const W = canvas.width, H = canvas.height;
 
+    // Clamp to valid canvas bounds to avoid out-of-bounds pixel access
+    startX = Math.max(0, Math.min(W - 1, startX));
+    startY = Math.max(0, Math.min(H - 1, startY));
+
     const fillR = parseInt(fillHex.slice(1,3),16);
     const fillG = parseInt(fillHex.slice(3,5),16);
     const fillB = parseInt(fillHex.slice(5,7),16);
@@ -1847,6 +2104,7 @@
 
   socket.on('playerJoined', ({ player, state }) => {
     updateLobby(state);
+    addLobbyChat({ system: true, text: `👋 ${player.name} joined!` });
     addChat({ system: true, text: `👋 ${player.name} joined!` });
   });
 
@@ -1869,6 +2127,12 @@
     hasGuessedPlayers = new Set();
     hasGuessedCorrect = false;
     myLockedPart = null;
+
+    // Preserve the word hint display during the choosing phase — save before any operations
+    const _savedWordHTML = document.getElementById('word-display').innerHTML;
+    const _savedWordCounts = document.getElementById('word-letter-counts').textContent;
+    const _savedWordClass = document.getElementById('word-display').className;
+
     showScreen('screen-game');
     document.getElementById('word-choice-overlay').style.display = 'none';
     document.getElementById('choosing-overlay').style.display = 'none';
@@ -1885,6 +2149,14 @@
     document.getElementById('chat-input').placeholder = 'Type your guess...';
     const srcEl = document.getElementById('word-source-label');
     if (srcEl) srcEl.textContent = '';
+
+    // Restore hint display if it was cleared by any code path
+    const wordDisplayEl = document.getElementById('word-display');
+    if (!wordDisplayEl.innerHTML.trim() && _savedWordHTML && _savedWordHTML.trim()) {
+      wordDisplayEl.innerHTML = _savedWordHTML;
+      wordDisplayEl.className = _savedWordClass;
+      document.getElementById('word-letter-counts').textContent = _savedWordCounts;
+    }
 
     // Clear chat
     document.getElementById('chat-messages').innerHTML = '';
@@ -1962,7 +2234,9 @@
     if (gameState?.options?.hidden) return;
     if (isMyTurn) return; // don't overwrite the artist's word display
     updateWordDisplay(hint, false);
-    addChat({ system: true, text: `💡 Hint: ${hint.split('').join(' ')}` });
+    // Format hint for chat: space between each character, " + " between combo parts
+    const hintForChat = hint.split('+').map(part => part.split('').join(' ')).join(' + ');
+    addChat({ system: true, text: `💡 Hint: ${hintForChat}` });
   });
 
   socket.on('timerTick', ({ timeLeft }) => {
@@ -1988,11 +2262,21 @@
   });
 
   socket.on('chat', (msg) => {
-    addChat({ playerId: msg.playerId, playerName: msg.playerName, text: msg.text, close: msg.isClose });
+    const inLobby = document.getElementById('screen-lobby').classList.contains('active');
+    if (inLobby) {
+      addLobbyChat({ playerId: msg.playerId, playerName: msg.playerName, text: msg.text });
+    } else {
+      addChat({ playerId: msg.playerId, playerName: msg.playerName, text: msg.text, close: msg.isClose });
+    }
   });
 
-  socket.on('correctGuess', ({ playerId, playerName, points, autocorrected, scores }) => {
+  socket.on('closeGuess', ({ playerName }) => {
+    showToast(`🔥 ${playerName} is close!`);
+  });
+
+  socket.on('correctGuess', ({ playerId, playerName, points, autocorrected, correctedWord, scores }) => {
     playSound('correct');
+    const alreadyGuessed = hasGuessedPlayers.has(myId);
     hasGuessedPlayers.add(playerId);
     const isMe = playerId === myId;
     if (isMe) {
@@ -2000,7 +2284,11 @@
       document.getElementById('chat-input').disabled = true;
       showToast(autocorrected ? `🎉 Close enough! +${points} points!` : `🎉 Correct! +${points} points!`);
     }
-    const label = autocorrected ? `✅ guessed it! (autocorrected) (+${points})` : `✅ guessed the word! (+${points})`;
+    // Show the actual word to: the guesser, the drawer, and players who already guessed
+    const canSeeWord = autocorrected && correctedWord && (isMe || isMyTurn || alreadyGuessed);
+    const label = autocorrected
+      ? `✅ guessed it! (autocorrected${canSeeWord ? ` → "${correctedWord}"` : ''}) (+${points})`
+      : `✅ guessed the word! (+${points})`;
     addChat({ playerId, playerName, text: label, correct: true });
     // update scores in player list
     if (gameState) {
@@ -2024,12 +2312,15 @@
     document.getElementById('word-letter-counts').textContent = '';
   });
 
-  socket.on('roundEnd', ({ word, scores }) => {
+  socket.on('roundEnd', ({ word, wordSource, scores }) => {
     // Capture canvas before it gets cleared
     lastRoundImageUrl = document.getElementById('main-canvas').toDataURL('image/png');
     document.getElementById('download-drawing-btn').style.display = 'inline-block';
 
-    document.getElementById('round-word').textContent = word;
+    const roundWordEl = document.getElementById('round-word');
+    roundWordEl.textContent = word;
+    if (wordSource) roundWordEl.textContent += ` (from: ${wordSource})`;
+    else roundWordEl.textContent = word;
     const container = document.getElementById('round-end-scores');
     container.innerHTML = '';
     [...scores].sort((a, b) => b.score - a.score).forEach(p => {
@@ -2082,9 +2373,20 @@
       list.appendChild(row);
     });
     document.getElementById('game-end-overlay').style.display = 'flex';
+    // Start countdown
+    let lobbyCountdownVal = 10;
+    const lobbyCountdownEl = document.getElementById('lobby-countdown');
+    if (lobbyCountdownEl) lobbyCountdownEl.textContent = lobbyCountdownVal;
+    if (window._lobbyCountdownTimer) clearInterval(window._lobbyCountdownTimer);
+    window._lobbyCountdownTimer = setInterval(() => {
+      lobbyCountdownVal--;
+      if (lobbyCountdownEl) lobbyCountdownEl.textContent = Math.max(0, lobbyCountdownVal);
+      if (lobbyCountdownVal <= 0) { clearInterval(window._lobbyCountdownTimer); window._lobbyCountdownTimer = null; }
+    }, 1000);
   });
 
   socket.on('backToLobby', (state) => {
+    if (window._lobbyCountdownTimer) { clearInterval(window._lobbyCountdownTimer); window._lobbyCountdownTimer = null; }
     document.getElementById('game-end-overlay').style.display = 'none';
     document.getElementById('round-end-overlay').style.display = 'none';
     isMyTurn = false;
