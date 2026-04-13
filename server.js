@@ -145,7 +145,9 @@ function createRoom(hostId, hostName) {
     combinationPart1: null, // first word chosen in 2-step combination pick
     wordChoicesPart2: [], // valid words for second combination pick
     wordChoicesSources: {}, // word -> listName it came from
-    currentWordSource: null, // listName of the currently drawn word
+    currentWordSource: null, // listName of the first part (or sole word)
+    currentWordSource2: null, // listName of the second part (combinations only)
+    coopPartnerIndex: null, // index of co-op partner in players array (set each round)
     options: {
       wordChoices: 3,
       roundTime: 80,
@@ -155,6 +157,7 @@ function createRoom(hostId, hostName) {
       autocorrectStrength: 1, // max levenshtein distance (0=off, 1=1 letter, 2=2 letters)
       showWordSource: false,   // show which list the word came from after each round
       lockComboParts: true,    // lock in guessed parts in combination mode; if false, show "is close" instead
+      coopMode: false,         // 2 artists draw together each round
     },
   };
   return roomId;
@@ -206,6 +209,9 @@ function getRoomPublicState(room) {
     })),
     host: room.host,
     currentDrawerId: room.players[room.currentDrawerIndex]?.id || null,
+    coopPartnerId: (room.options?.coopMode && room.coopPartnerIndex !== null)
+      ? room.players[room.coopPartnerIndex]?.id || null
+      : null,
     timeLeft: room.timeLeft,
     wordLength: (room.currentWord && !room.options.hidden) ? room.currentWord.length : 0,
     wordSpaces: (room.currentWord && !room.options.hidden) ? maskWord(room.currentWord) : null,
@@ -239,6 +245,8 @@ function startRound(roomId) {
   room.wordChoicesPart2 = [];
   room.wordChoicesSources = {};
   room.currentWordSource = null;
+  room.currentWordSource2 = null;
+  room.coopPartnerIndex = null;
 
   if (room.currentDrawerIndex >= room.players.length) {
     room.currentDrawerIndex = 0;
@@ -253,6 +261,14 @@ function startRound(roomId) {
   const drawer = room.players[room.currentDrawerIndex];
   if (!drawer) { endGame(roomId); return; }
 
+  // Co-op mode: pick a random partner from the remaining players
+  let coopPartner = null;
+  if (room.options.coopMode && room.players.length >= 2) {
+    const otherIndices = room.players.map((_, i) => i).filter(i => i !== room.currentDrawerIndex);
+    room.coopPartnerIndex = otherIndices[Math.floor(Math.random() * otherIndices.length)];
+    coopPartner = room.players[room.coopPartnerIndex];
+  }
+
   const wordChoicesWithSource = getRandomSingleWordsWithSource(room, room.options.wordChoices);
   room.wordChoices = wordChoicesWithSource.map(w => w.word);
   room.wordChoicesSources = {};
@@ -260,16 +276,33 @@ function startRound(roomId) {
   room.state = 'choosing';
   room.timeLeft = 20;
 
+  // Determine who picks the word (co-op non-combo: player with more points)
+  let wordPicker = drawer;
+  if (coopPartner && !room.options.combinations) {
+    const drawerScore = room.scores[drawer.id] || 0;
+    const partnerScore = room.scores[coopPartner.id] || 0;
+    if (partnerScore > drawerScore) wordPicker = coopPartner;
+  }
+
   io.to(roomId).emit('roundStart', {
     ...getRoomPublicState(room),
     drawerId: drawer.id,
     drawerName: drawer.name,
+    coopPartnerId: coopPartner?.id || null,
+    coopPartnerName: coopPartner?.name || null,
+    wordPickerId: wordPicker.id,
   });
 
   if (room.options.combinations) {
-    io.to(drawer.id).emit('wordChoices', { words: room.wordChoices, part: 1 });
+    // Part 1 always goes to the primary drawer; co-op partner picks part 2 after
+    io.to(drawer.id).emit('wordChoices', {
+      words: room.wordChoices,
+      part: 1,
+      isCoopCombo: !!(coopPartner),
+      coopPartnerName: coopPartner?.name || null,
+    });
   } else {
-    io.to(drawer.id).emit('wordChoices', { words: room.wordChoices });
+    io.to(wordPicker.id).emit('wordChoices', { words: room.wordChoices });
   }
 
   room.timer = setInterval(() => {
@@ -302,9 +335,10 @@ function wordChosen(roomId, word) {
 
   room.currentWord = word;
   room.wordUsedCount[word] = (room.wordUsedCount[word] || 0) + 1;
-  // Track which list this word came from (for combos, use the first part's source)
-  const sourcePart = word.includes('+') ? word.split('+')[0] : word;
-  room.currentWordSource = room.wordChoicesSources[sourcePart] || null;
+  // Track which list each part came from
+  const wordParts = word.split('+');
+  room.currentWordSource = room.wordChoicesSources[wordParts[0]] || null;
+  room.currentWordSource2 = wordParts.length > 1 ? (room.wordChoicesSources[wordParts[1]] || null) : null;
   room.state = 'drawing';
   room.lockedParts = {};
   room.combinationPart1 = null;
@@ -316,6 +350,7 @@ function wordChosen(roomId, word) {
   room.revealedIndices = [];
 
   const drawer = room.players[room.currentDrawerIndex];
+  const coopPartner = room.coopPartnerIndex !== null ? room.players[room.coopPartnerIndex] : null;
   const masked = maskWord(word);
 
   io.to(roomId).emit('drawingStart', {
@@ -323,9 +358,16 @@ function wordChosen(roomId, word) {
     maskedWord: masked,
     drawerId: drawer.id,
     drawerName: drawer.name,
+    coopPartnerId: coopPartner?.id || null,
+    coopPartnerName: coopPartner?.name || null,
+    wordSource: room.options.showWordSource ? room.currentWordSource : null,
+    wordSource2: room.options.showWordSource ? room.currentWordSource2 : null,
   });
 
-  io.to(drawer.id).emit('yourWord', { word, sourceList: room.currentWordSource });
+  io.to(drawer.id).emit('yourWord', { word, sourceList: room.currentWordSource, sourceList2: room.currentWordSource2 });
+  if (coopPartner) {
+    io.to(coopPartner.id).emit('yourWord', { word, sourceList: room.currentWordSource, sourceList2: room.currentWordSource2 });
+  }
 
   const roundTime = room.options.roundTime;
   const hintCount = room.options.hintCount;
@@ -375,6 +417,7 @@ function endDrawingRound(roomId) {
   io.to(roomId).emit('roundEnd', {
     word: room.currentWord,
     wordSource: room.options.showWordSource ? room.currentWordSource : null,
+    wordSource2: room.options.showWordSource ? room.currentWordSource2 : null,
     scores: room.players.map(p => ({ id: p.id, name: p.name, score: room.scores[p.id] || 0 })),
   });
 
@@ -448,6 +491,7 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (room.host !== socket.id) { socket.emit('error', { message: 'Only the host can start.' }); return; }
     if (room.players.length < 2) { socket.emit('error', { message: 'Need at least 2 players.' }); return; }
+    if (room.options.coopMode && room.players.length < 3) { socket.emit('error', { message: 'Co-op mode needs at least 3 players.' }); return; }
 
     room.round = 1;
     room.currentDrawerIndex = 0;
@@ -491,15 +535,19 @@ io.on('connection', (socket) => {
   socket.on('setGameOptions', ({ options }) => {
     if (!currentRoom) return;
     const room = getRoom(currentRoom);
-    if (!room || room.host !== socket.id || room.state !== 'lobby') return;
-    if (options.wordChoices !== undefined) room.options.wordChoices = Math.max(2, Math.min(6, parseInt(options.wordChoices) || 3));
-    if (options.roundTime !== undefined) room.options.roundTime = Math.max(15, Math.min(180, parseInt(options.roundTime) || 80));
-    if (options.hintCount !== undefined) { const h = parseInt(options.hintCount); room.options.hintCount = Math.max(0, Math.min(5, isNaN(h) ? 2 : h)); }
-    if (options.combinations !== undefined) room.options.combinations = !!options.combinations;
-    if (options.hidden !== undefined) room.options.hidden = !!options.hidden;
-    if (options.autocorrectStrength !== undefined) room.options.autocorrectStrength = Math.max(0, Math.min(2, parseInt(options.autocorrectStrength) || 0));
+    if (!room || room.host !== socket.id) return;
+    // showWordSource can be toggled any time (takes effect on next draw event / current round)
     if (options.showWordSource !== undefined) room.options.showWordSource = !!options.showWordSource;
-    if (options.lockComboParts !== undefined) room.options.lockComboParts = !!options.lockComboParts;
+    if (room.state === 'lobby') {
+      if (options.wordChoices !== undefined) room.options.wordChoices = Math.max(2, Math.min(6, parseInt(options.wordChoices) || 3));
+      if (options.roundTime !== undefined) room.options.roundTime = Math.max(15, Math.min(180, parseInt(options.roundTime) || 80));
+      if (options.hintCount !== undefined) { const h = parseInt(options.hintCount); room.options.hintCount = Math.max(0, Math.min(5, isNaN(h) ? 2 : h)); }
+      if (options.combinations !== undefined) room.options.combinations = !!options.combinations;
+      if (options.hidden !== undefined) room.options.hidden = !!options.hidden;
+      if (options.autocorrectStrength !== undefined) room.options.autocorrectStrength = Math.max(0, Math.min(2, parseInt(options.autocorrectStrength) || 0));
+      if (options.lockComboParts !== undefined) room.options.lockComboParts = !!options.lockComboParts;
+      if (options.coopMode !== undefined) room.options.coopMode = !!options.coopMode;
+    }
     io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
   });
 
@@ -508,24 +556,44 @@ io.on('connection', (socket) => {
     const room = getRoom(currentRoom);
     if (!room) return;
     const drawer = room.players[room.currentDrawerIndex];
-    if (!drawer || drawer.id !== socket.id) return;
+    const coopPartner = room.coopPartnerIndex !== null ? room.players[room.coopPartnerIndex] : null;
     if (room.state !== 'choosing') return;
 
     if (room.options.combinations) {
       if (!room.combinationPart1) {
-        // Part 1 selection
+        // Part 1: only the primary drawer can pick
+        if (!drawer || drawer.id !== socket.id) return;
         if (!room.wordChoices.includes(word)) return;
         room.combinationPart1 = word;
         const p2WithSource = getRandomSingleWordsWithSource(room, room.options.wordChoices, new Set([word]));
         room.wordChoicesPart2 = p2WithSource.map(w => w.word);
         p2WithSource.forEach(({ word: w, listName }) => { room.wordChoicesSources[w] = listName; });
-        io.to(drawer.id).emit('wordChoices', { words: room.wordChoicesPart2, part: 2, firstWord: word });
+        // Co-op combo: part 2 goes to the co-op partner; otherwise same drawer
+        const part2Recipient = (room.options.coopMode && coopPartner) ? coopPartner : drawer;
+        const coopPart2 = !!(room.options.coopMode && coopPartner);
+        io.to(part2Recipient.id).emit('wordChoices', {
+          words: room.wordChoicesPart2,
+          part: 2,
+          firstWord: word,
+          coopPart2,
+          firstPickerName: coopPart2 ? drawer.name : undefined,
+        });
       } else {
-        // Part 2 selection
+        // Part 2: co-op combo → partner picks; otherwise same drawer
+        const part2Picker = (room.options.coopMode && coopPartner) ? coopPartner : drawer;
+        if (!part2Picker || part2Picker.id !== socket.id) return;
         if (!room.wordChoicesPart2.includes(word)) return;
         wordChosen(currentRoom, `${room.combinationPart1}+${word}`);
       }
     } else {
+      // Non-combo: co-op → player with more points picks; otherwise primary drawer
+      let picker = drawer;
+      if (coopPartner) {
+        const drawerScore = room.scores[drawer?.id] || 0;
+        const partnerScore = room.scores[coopPartner.id] || 0;
+        if (partnerScore > drawerScore) picker = coopPartner;
+      }
+      if (!picker || picker.id !== socket.id) return;
       if (!room.wordChoices.includes(word)) return;
       wordChosen(currentRoom, word);
     }
@@ -536,7 +604,9 @@ io.on('connection', (socket) => {
     const room = getRoom(currentRoom);
     if (!room || room.state !== 'drawing') return;
     const drawer = room.players[room.currentDrawerIndex];
-    if (!drawer || drawer.id !== socket.id) return;
+    const coopPartner = room.coopPartnerIndex !== null ? room.players[room.coopPartnerIndex] : null;
+    const isDrawer = (drawer && drawer.id === socket.id) || (coopPartner && coopPartner.id === socket.id);
+    if (!isDrawer) return;
     room.currentStroke.push(data);
     room.drawHistory.push(data);
     socket.to(currentRoom).emit('draw', data);
@@ -547,7 +617,9 @@ io.on('connection', (socket) => {
     const room = getRoom(currentRoom);
     if (!room || room.state !== 'drawing') return;
     const drawer = room.players[room.currentDrawerIndex];
-    if (!drawer || drawer.id !== socket.id) return;
+    const coopPartner = room.coopPartnerIndex !== null ? room.players[room.coopPartnerIndex] : null;
+    const isDrawer = (drawer && drawer.id === socket.id) || (coopPartner && coopPartner.id === socket.id);
+    if (!isDrawer) return;
     if (room.currentStroke.length > 0) {
       room.strokes.push(room.currentStroke);
       room.currentStroke = [];
@@ -559,8 +631,9 @@ io.on('connection', (socket) => {
     const room = getRoom(currentRoom);
     if (!room || room.state !== 'drawing') return;
     const drawer = room.players[room.currentDrawerIndex];
-    if (!drawer || drawer.id !== socket.id) return;
-    // Discard any in-progress stroke too
+    const coopPartner = room.coopPartnerIndex !== null ? room.players[room.coopPartnerIndex] : null;
+    const isDrawer = (drawer && drawer.id === socket.id) || (coopPartner && coopPartner.id === socket.id);
+    if (!isDrawer) return;
     room.currentStroke = [];
     if (room.strokes.length > 0) room.strokes.pop();
     room.drawHistory = buildDrawHistory(room.strokes);
@@ -572,7 +645,9 @@ io.on('connection', (socket) => {
     const room = getRoom(currentRoom);
     if (!room) return;
     const drawer = room.players[room.currentDrawerIndex];
-    if (!drawer || drawer.id !== socket.id) return;
+    const coopPartner = room.coopPartnerIndex !== null ? room.players[room.coopPartnerIndex] : null;
+    const isDrawer = (drawer && drawer.id === socket.id) || (coopPartner && coopPartner.id === socket.id);
+    if (!isDrawer) return;
     room.strokes.push({ clear: true }); // marker so undo can restore pre-clear state
     room.currentStroke = [];
     room.drawHistory = [];
@@ -584,7 +659,9 @@ io.on('connection', (socket) => {
     const room = getRoom(currentRoom);
     if (!room || room.state !== 'drawing') return;
     const drawer = room.players[room.currentDrawerIndex];
+    const coopPartner = room.coopPartnerIndex !== null ? room.players[room.coopPartnerIndex] : null;
     if (drawer && drawer.id === socket.id) return;
+    if (coopPartner && coopPartner.id === socket.id) return;
     if (room.guessedPlayers.has(socket.id)) return;
 
     const player = room.players.find(p => p.id === socket.id);
@@ -610,7 +687,10 @@ io.on('connection', (socket) => {
         if (matchedPart) {
           if (room.options.lockComboParts !== false) {
             room.lockedParts[socket.id] = matchedPart;
-            socket.emit('partLocked', { lockedPart: matchedPart });
+            const remaining = aParts.find(p => p !== matchedPart) || '';
+            const remainingMask = maskWord(remaining);
+            const lockedIsFirst = aParts[0] === matchedPart;
+            socket.emit('partLocked', { lockedPart: matchedPart, remainingMask, lockedIsFirst });
           } else {
             // Lock disabled — notify guesser they're close without revealing the part
             socket.emit('closeGuess', { playerName: player.name });
@@ -647,6 +727,9 @@ io.on('connection', (socket) => {
       if (drawer) {
         room.scores[drawer.id] = (room.scores[drawer.id] || 0) + 25;
       }
+      if (coopPartner) {
+        room.scores[coopPartner.id] = (room.scores[coopPartner.id] || 0) + 25;
+      }
 
       io.to(currentRoom).emit('correctGuess', {
         playerId: socket.id,
@@ -657,7 +740,7 @@ io.on('connection', (socket) => {
         scores: room.players.map(p => ({ id: p.id, name: p.name, score: room.scores[p.id] || 0 })),
       });
 
-      const nonDrawers = room.players.filter(p => p.id !== drawer?.id);
+      const nonDrawers = room.players.filter(p => p.id !== drawer?.id && p.id !== coopPartner?.id);
       if (nonDrawers.every(p => room.guessedPlayers.has(p.id))) {
         clearRoomTimer(room);
         endDrawingRound(currentRoom);

@@ -1,7 +1,2 @@
-the word hint goes away when someone is picking a word, change pick time to 20 seconds
-make the amount letters a word has like the (x) number in the word hint a little bigger
-add a setting gear which opens a menu to change the size of UI which includes word hints chat leaderboards etc, and change the sitewide color with a color picker
-change the default drawing colors to these: #000000 #4c4c4c #c1c1c1 #ffffff #740b07 #ef130b #c23800 #ff7100 #ffe400 #e8a200 #005510 #00cc00 #0e0865 #231fd3 #00569e #00b2ff #550069 #a300ba #a75574 #d37caa #63300d #a0522d, keep the recent colors
-add a chat in the lobby
-if autocorrect is disabled or lower then 2, add an (your name) is close! popup to show that the user is close to the word
-add a setting to enable or disable locking in words on combination, if it is not enabled then "is close" will show up instead of locking in a word
+when you download the drawing it should show the name of the person who drew it
+when downloading the drawing the name of the image file should be the term that was drawn
