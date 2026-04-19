@@ -148,6 +148,9 @@ function createRoom(hostId, hostName) {
     currentWordSource: null, // listName of the first part (or sole word)
     currentWordSource2: null, // listName of the second part (combinations only)
     coopPartnerIndex: null, // index of co-op partner in players array (set each round)
+    endGameTimer: null,
+    hintTimes: [],
+    skipHints: false,
     options: {
       wordChoices: 3,
       roundTime: 80,
@@ -158,6 +161,7 @@ function createRoom(hostId, hostName) {
       showWordSource: false,   // show which list the word came from after each round
       lockComboParts: true,    // lock in guessed parts in combination mode; if false, show "is close" instead
       coopMode: false,         // 2 artists draw together each round
+      rounds: 3,               // number of rounds per game
     },
   };
   return roomId;
@@ -201,7 +205,7 @@ function getRoomPublicState(room) {
     id: room.id,
     state: room.state,
     round: room.round,
-    totalRounds: ROUNDS_PER_GAME,
+    totalRounds: room.options.rounds || ROUNDS_PER_GAME,
     players: room.players.map(p => ({
       id: p.id,
       name: p.name,
@@ -253,7 +257,7 @@ function startRound(roomId) {
     room.round++;
   }
 
-  if (room.round > ROUNDS_PER_GAME) {
+  if (room.round > (room.options.rounds || ROUNDS_PER_GAME)) {
     endGame(roomId);
     return;
   }
@@ -301,8 +305,26 @@ function startRound(roomId) {
       isCoopCombo: !!(coopPartner),
       coopPartnerName: coopPartner?.name || null,
     });
+    // Co-op partner sees part 1 choices read-only while drawer picks
+    if (coopPartner) {
+      io.to(coopPartner.id).emit('wordChoices', {
+        words: room.wordChoices,
+        part: 1,
+        readOnly: true,
+        pickerName: drawer.name,
+      });
+    }
   } else {
     io.to(wordPicker.id).emit('wordChoices', { words: room.wordChoices });
+    // Non-picker co-op artist sees the choices read-only
+    if (coopPartner) {
+      const nonPickerArtist = (wordPicker === drawer) ? coopPartner : drawer;
+      io.to(nonPickerArtist.id).emit('wordChoices', {
+        words: room.wordChoices,
+        readOnly: true,
+        pickerName: wordPicker.name,
+      });
+    }
   }
 
   room.timer = setInterval(() => {
@@ -384,15 +406,17 @@ function wordChosen(roomId, word) {
     }
   }
 
-  room.timer = setInterval(() => {
-    const guessedCount = room.guessedPlayers ? room.guessedPlayers.size : 0;
-    room.timeLeft = Math.max(0, room.timeLeft - (1 + guessedCount));
+  room.hintTimes = hintTimes;
+  room.skipHints = skipHints;
 
-    if (!skipHints) {
-      for (let i = 0; i < hintTimes.length; i++) {
-        if (room.timeLeft === hintTimes[i] && room.hintsGiven === i) {
+  room.timer = setInterval(() => {
+    room.timeLeft = Math.max(0, room.timeLeft - 1);
+
+    if (!room.skipHints) {
+      for (let i = 0; i < room.hintTimes.length; i++) {
+        if (room.timeLeft === room.hintTimes[i] && room.hintsGiven === i) {
           room.hintsGiven = i + 1;
-          const hint = giveHint(word, room.revealedIndices, 1); // always reveal 1 letter
+          const hint = giveHint(room.currentWord, room.revealedIndices, 1);
           io.to(roomId).emit('hint', { hint });
           break;
         }
@@ -440,7 +464,8 @@ function endGame(roomId) {
 
   io.to(roomId).emit('gameEnd', { finalScores });
 
-  setTimeout(() => {
+  room.endGameTimer = setTimeout(() => {
+    room.endGameTimer = null;
     if (rooms[roomId]) {
       room.state = 'lobby';
       room.round = 0;
@@ -547,6 +572,7 @@ io.on('connection', (socket) => {
       if (options.autocorrectStrength !== undefined) room.options.autocorrectStrength = Math.max(0, Math.min(2, parseInt(options.autocorrectStrength) || 0));
       if (options.lockComboParts !== undefined) room.options.lockComboParts = !!options.lockComboParts;
       if (options.coopMode !== undefined) room.options.coopMode = !!options.coopMode;
+      if (options.rounds !== undefined) room.options.rounds = Math.max(1, Math.min(10, parseInt(options.rounds) || 3));
     }
     io.to(currentRoom).emit('stateUpdate', getRoomPublicState(room));
   });
@@ -621,7 +647,7 @@ io.on('connection', (socket) => {
     const isDrawer = (drawer && drawer.id === socket.id) || (coopPartner && coopPartner.id === socket.id);
     if (!isDrawer) return;
     if (room.currentStroke.length > 0) {
-      room.strokes.push(room.currentStroke);
+      room.strokes.push({ events: room.currentStroke, drawerId: socket.id });
       room.currentStroke = [];
     }
   });
@@ -635,7 +661,15 @@ io.on('connection', (socket) => {
     const isDrawer = (drawer && drawer.id === socket.id) || (coopPartner && coopPartner.id === socket.id);
     if (!isDrawer) return;
     room.currentStroke = [];
-    if (room.strokes.length > 0) room.strokes.pop();
+    // Find and remove only the last stroke drawn by this specific player
+    let lastIdx = -1;
+    for (let i = room.strokes.length - 1; i >= 0; i--) {
+      if (room.strokes[i] && !room.strokes[i].clear && room.strokes[i].drawerId === socket.id) {
+        lastIdx = i;
+        break;
+      }
+    }
+    if (lastIdx !== -1) room.strokes.splice(lastIdx, 1);
     room.drawHistory = buildDrawHistory(room.strokes);
     io.to(currentRoom).emit('redrawAll', { history: room.drawHistory });
   });
@@ -744,6 +778,19 @@ io.on('connection', (socket) => {
       if (nonDrawers.every(p => room.guessedPlayers.has(p.id))) {
         clearRoomTimer(room);
         endDrawingRound(currentRoom);
+      } else {
+        // Remove 1/3 of remaining time instead of speeding up the tick
+        room.timeLeft = Math.max(0, Math.floor(room.timeLeft * 2 / 3));
+        // Redistribute remaining hints evenly across the new remaining time
+        const remainingHints = room.hintTimes.length - room.hintsGiven;
+        if (remainingHints > 0) {
+          const newTimes = [];
+          for (let j = 0; j < remainingHints; j++) {
+            newTimes.push(Math.floor(room.timeLeft * (remainingHints - j) / (remainingHints + 1)));
+          }
+          room.hintTimes = [...room.hintTimes.slice(0, room.hintsGiven), ...newTimes];
+        }
+        io.to(currentRoom).emit('timerTick', { timeLeft: room.timeLeft });
       }
     } else {
       const isClose = dist <= 2 && guess.length > 2;
@@ -835,6 +882,19 @@ io.on('connection', (socket) => {
     playerName = null;
   });
 
+  socket.on('skipToLobby', () => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room || room.host !== socket.id || room.state !== 'gameEnd') return;
+    if (room.endGameTimer) { clearTimeout(room.endGameTimer); room.endGameTimer = null; }
+    room.state = 'lobby';
+    room.round = 0;
+    room.currentDrawerIndex = 0;
+    room.wordUsedCount = {};
+    room.players.forEach(p => { room.scores[p.id] = 0; });
+    io.to(currentRoom).emit('backToLobby', getRoomPublicState(room));
+  });
+
   socket.on('disconnect', () => {
     if (!currentRoom) return;
     const room = getRoom(currentRoom);
@@ -863,8 +923,12 @@ function buildDrawHistory(strokes) {
     if (strokes[i] && strokes[i].clear) { startIdx = i; break; }
   }
   const relevant = strokes.slice(startIdx + 1);
-  // Each element is a stroke array; flatten (clear markers won't appear here)
-  return [].concat(...relevant.filter(s => Array.isArray(s)));
+  const events = [];
+  relevant.forEach(s => {
+    if (Array.isArray(s)) events.push(...s); // legacy format
+    else if (s && Array.isArray(s.events)) events.push(...s.events);
+  });
+  return events;
 }
 
 function levenshtein(a, b) {

@@ -1086,6 +1086,14 @@
         </div>
       </div>
       <div class="option-item">
+        <label>Rounds</label>
+        <div class="option-slider-row">
+          <input type="range" class="option-slider" id="opt-rounds" min="1" max="10" step="1" value="3"
+            oninput="optSliderUpdate(this,'rounds')" />
+          <span class="option-val" id="opt-rounds-val">3</span>
+        </div>
+      </div>
+      <div class="option-item">
         <label>Autocorrect</label>
         <div class="option-slider-row">
           <input type="range" class="option-slider" id="opt-autocorrect" min="0" max="2" step="1" value="1"
@@ -1235,6 +1243,7 @@
     <div class="podium" id="podium"></div>
     <div id="final-scores-list"></div>
     <p style="color:var(--text-dim);font-size:0.85rem">Returning to lobby in <span id="lobby-countdown">10</span> seconds...</p>
+    <button id="host-skip-lobby-btn" onclick="skipToLobby()" class="btn btn-success" style="display:none;margin-top:8px">⏭️ Return to Lobby Now</button>
   </div>
 </div>
 
@@ -1259,6 +1268,7 @@
   let currentClientStroke = []; // events in current stroke
   let lastRoundImageUrl = null; // saved canvas for download
   let lastRoundWord = null;
+  let lastRoundDrawerName = null;
   let lastRoundGuessCount = 0;
   let lastRoundPlayerCount = 0;
   let lastRoundTimeSpent = null; // seconds, only set when everyone guessed
@@ -1588,6 +1598,8 @@
     if (lcp) lcp.checked = opts.lockComboParts !== false;
     const coop = document.getElementById('opt-coop-mode');
     if (coop) coop.checked = !!opts.coopMode;
+    const rnd = document.getElementById('opt-rounds');
+    if (rnd) { rnd.value = String(opts.rounds || 3); document.getElementById('opt-rounds-val').textContent = opts.rounds || 3; }
   }
 
   function sendGameOption(key, value) {
@@ -1744,14 +1756,15 @@
     sorted.forEach((p, i) => {
       const av = getPlayerAvatar(p.id);
       const isDrawer = p.id === state.currentDrawerId;
+      const isCoopPartner = !!(state.coopPartnerId && p.id === state.coopPartnerId);
       const guessed = hasGuessedPlayers && hasGuessedPlayers.has(p.id);
       const row = document.createElement('div');
-      row.className = 'player-row' + (isDrawer ? ' drawing-now' : '') + (guessed ? ' guessed-correct' : '');
+      row.className = 'player-row' + (isDrawer || isCoopPartner ? ' drawing-now' : '') + (guessed ? ' guessed-correct' : '');
       row.innerHTML = `
         <span class="rank">${i + 1}</span>
         <div class="p-avatar" style="background:${av.color}">${av.emoji}</div>
         <span class="p-name">${p.name}${p.id === myId ? ' (you)' : ''}</span>
-        ${isDrawer ? '<span class="drawing-icon">🖌️</span>' : ''}
+        ${isDrawer || isCoopPartner ? '<span class="drawing-icon">🖌️</span>' : ''}
         ${guessed ? '<span class="check-icon">✓</span>' : ''}
         <span class="p-score">${p.score}</span>
       `;
@@ -1960,10 +1973,13 @@
     if (!isMyTurn) return;
     currentClientStroke = [];
     if (clientStrokes.length > 0) clientStrokes.pop();
-    // Redraw locally from history (handles clear markers correctly)
-    ctx.fillStyle = canvasBgColor;
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    buildClientHistory(clientStrokes).forEach(d => applyDraw(d));
+    // In co-op mode skip local redraw — partner strokes aren't in clientStrokes,
+    // so let the server's redrawAll event handle the full canvas update.
+    if (!gameState?.coopPartnerId) {
+      ctx.fillStyle = canvasBgColor;
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      buildClientHistory(clientStrokes).forEach(d => applyDraw(d));
+    }
     socket.emit('undo');
   }
 
@@ -2258,12 +2274,27 @@
     }
   });
 
-  socket.on('wordChoices', ({ words, part, firstWord, coopPart2, firstPickerName, isCoopCombo, coopPartnerName }) => {
+  socket.on('wordChoices', ({ words, part, firstWord, coopPart2, firstPickerName, isCoopCombo, coopPartnerName, readOnly, pickerName }) => {
     showScreen('screen-game');
     const overlay = document.getElementById('word-choice-overlay');
     const titleEl = overlay.querySelector('h3');
     const container = document.getElementById('word-choices-container');
     container.innerHTML = '';
+
+    if (readOnly) {
+      titleEl.textContent = `👁️ ${pickerName || 'Your partner'} is choosing a word...`;
+      words.forEach(word => {
+        const btn = document.createElement('button');
+        btn.className = 'word-choice-btn';
+        btn.textContent = word;
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'default';
+        container.appendChild(btn);
+      });
+      overlay.style.display = 'flex';
+      return;
+    }
 
     if (part === 2 && coopPart2) {
       titleEl.textContent = `🖌️ ${firstPickerName} picked "${firstWord}" — now you pick the second word!`;
@@ -2299,6 +2330,7 @@
   socket.on('drawingStart', (state) => {
     gameState = state;
     myLockedPart = null;
+    lastRoundDrawerName = state.drawerName + (state.coopPartnerName ? ' & ' + state.coopPartnerName : '');
     document.getElementById('chat-input').placeholder = 'Type your guess...';
     playSound('bell');
     const amDrawer = state.drawerId === myId || state.coopPartnerId === myId;
@@ -2429,14 +2461,18 @@
     addChat({ system: true, text: `🔒 You got one! Now guess the other word.` });
     document.getElementById('chat-input').placeholder = `Got "${lockedPart}" — type the other word...`;
     const el = document.getElementById('word-display');
-    const maskDisplay = (remainingMask || '').split('').join(' ');
+    // Format remaining mask with proper per-word spacing (same style as updateWordDisplay)
+    const maskParts = (remainingMask || '').split(' ');
+    const maskFormatted = maskParts.map(p => p.split('').join(' ')).join('<span class="word-gap"></span>');
     if (lockedIsFirst !== false) {
-      el.innerHTML = `<span style="color:var(--green)">${lockedPart}</span> <span style="opacity:0.5">+</span> <span>${maskDisplay}</span>`;
+      el.innerHTML = `<span style="color:var(--green)">${lockedPart}</span> <span style="opacity:0.5">+</span> <span>${maskFormatted}</span>`;
     } else {
-      el.innerHTML = `<span>${maskDisplay}</span> <span style="opacity:0.5">+</span> <span style="color:var(--green)">${lockedPart}</span>`;
+      el.innerHTML = `<span>${maskFormatted}</span> <span style="opacity:0.5">+</span> <span style="color:var(--green)">${lockedPart}</span>`;
     }
     el.classList.add('revealed');
-    document.getElementById('word-letter-counts').textContent = '';
+    // Show letter count for the remaining word(s)
+    const letterCounts = (remainingMask || '').split(' ').filter(p => p.length > 0).map(p => p.length);
+    document.getElementById('word-letter-counts').textContent = letterCounts.join('   ');
   });
 
   socket.on('roundEnd', ({ word, wordSource, wordSource2, scores }) => {
@@ -2485,7 +2521,7 @@
       const c = offscreen.getContext('2d');
       c.drawImage(img, 0, 0);
 
-      const bannerH = lastRoundTimeSpent !== null ? 120 : 90;
+      const bannerH = lastRoundTimeSpent !== null ? 150 : 120;
       const y0 = offscreen.height - bannerH;
       c.fillStyle = 'rgba(0, 0, 0, 0.65)';
       c.fillRect(0, y0, offscreen.width, bannerH);
@@ -2497,19 +2533,24 @@
       c.font = 'bold 34px sans-serif';
       c.fillText(lastRoundWord || '', offscreen.width / 2, y0 + 26);
 
+      c.font = '18px sans-serif';
+      c.fillStyle = '#aaaaaa';
+      c.fillText(`drawn by ${lastRoundDrawerName || 'unknown'}`, offscreen.width / 2, y0 + 58);
+
       c.font = '22px sans-serif';
       c.fillStyle = '#dddddd';
-      c.fillText(`${lastRoundGuessCount} / ${lastRoundPlayerCount} guessed it`, offscreen.width / 2, y0 + 60);
+      c.fillText(`${lastRoundGuessCount} / ${lastRoundPlayerCount} guessed it`, offscreen.width / 2, y0 + 90);
 
       if (lastRoundTimeSpent !== null) {
         c.font = '20px sans-serif';
         c.fillStyle = '#ffd60a';
-        c.fillText(`everyone got it in ${lastRoundTimeSpent}s!`, offscreen.width / 2, y0 + 93);
+        c.fillText(`everyone got it in ${lastRoundTimeSpent}s!`, offscreen.width / 2, y0 + 123);
       }
 
+      const safeWord = (lastRoundWord || 'drawing').replace(/[^a-zA-Z0-9 ]/g, '-').trim();
       const a = document.createElement('a');
       a.href = offscreen.toDataURL('image/png');
-      a.download = `mivimoose-round.png`;
+      a.download = `${safeWord}.png`;
       a.click();
     };
     img.src = lastRoundImageUrl;
@@ -2542,6 +2583,9 @@
       list.appendChild(row);
     });
     document.getElementById('game-end-overlay').style.display = 'flex';
+    // Show skip button for the host
+    const skipBtn = document.getElementById('host-skip-lobby-btn');
+    if (skipBtn) skipBtn.style.display = (gameState?.host === myId) ? 'inline-block' : 'none';
     // Start countdown
     let lobbyCountdownVal = 10;
     const lobbyCountdownEl = document.getElementById('lobby-countdown');
@@ -2554,9 +2598,13 @@
     }, 1000);
   });
 
+  function skipToLobby() { socket.emit('skipToLobby'); }
+
   socket.on('backToLobby', (state) => {
     if (window._lobbyCountdownTimer) { clearInterval(window._lobbyCountdownTimer); window._lobbyCountdownTimer = null; }
     document.getElementById('game-end-overlay').style.display = 'none';
+    const skipBtn = document.getElementById('host-skip-lobby-btn');
+    if (skipBtn) skipBtn.style.display = 'none';
     document.getElementById('round-end-overlay').style.display = 'none';
     isMyTurn = false;
     hasGuessedCorrect = false;
@@ -2584,13 +2632,19 @@
 
   // Choosing overlay for non-pickers while word is being chosen
   socket.on('roundStart', (state) => {
-    if (state.wordPickerId !== myId) {
+    const amArtist = myId === state.drawerId || myId === state.coopPartnerId;
+    // Artists get wordChoices (active or read-only), everyone else sees choosing overlay
+    if (!amArtist && state.wordPickerId !== myId) {
       const overlay = document.getElementById('choosing-overlay');
-      // Show the name of whoever is actually picking the word
-      const pickerName = (state.coopPartnerId && state.wordPickerId === state.coopPartnerId)
-        ? state.coopPartnerName
-        : state.drawerName;
-      document.getElementById('choosing-drawer-name').textContent = `🖌️ ${pickerName}`;
+      let displayName;
+      if (state.coopPartnerId && state.coopPartnerName) {
+        displayName = `${state.drawerName} & ${state.coopPartnerName}`;
+      } else {
+        displayName = (state.coopPartnerId && state.wordPickerId === state.coopPartnerId)
+          ? state.coopPartnerName
+          : state.drawerName;
+      }
+      document.getElementById('choosing-drawer-name').textContent = `🖌️ ${displayName}`;
       overlay.style.display = 'flex';
     }
   });
