@@ -725,10 +725,21 @@ io.on('connection', (socket) => {
             const remainingMask = maskWord(remaining);
             const lockedIsFirst = aParts[0] === matchedPart;
             socket.emit('partLocked', { lockedPart: matchedPart, remainingMask, lockedIsFirst });
+            io.to(currentRoom).emit('chat', {
+              system: true,
+              text: `🔒 ${player.name} got the ${lockedIsFirst ? 'first' : 'second'} word!`,
+            });
           } else {
             // Lock disabled — notify guesser they're close without revealing the part
             socket.emit('closeGuess', { playerName: player.name });
-            io.to(currentRoom).emit('chat', {
+            socket.to(currentRoom).emit('chat', {
+              playerId: socket.id,
+              playerName: player.name,
+              text,
+              isClose: false,
+              isGuess: true,
+            });
+            socket.emit('chat', {
               playerId: socket.id,
               playerName: player.name,
               text,
@@ -794,7 +805,14 @@ io.on('connection', (socket) => {
       }
     } else {
       const isClose = dist <= 2 && guess.length > 2;
-      io.to(currentRoom).emit('chat', {
+      socket.to(currentRoom).emit('chat', {
+        playerId: socket.id,
+        playerName: player.name,
+        text,
+        isClose: false,
+        isGuess: true,
+      });
+      socket.emit('chat', {
         playerId: socket.id,
         playerName: player.name,
         text,
